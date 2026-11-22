@@ -19,12 +19,13 @@ struct Palette {
   Rgb engine;       // engine cowling colour
   Rgb fin;          // fin base colour
   uint8_t nose_red; // 1 = nose cone in the primary colour
+  uint8_t gear;     // 1 = landing gear down (drawn when the plane is low and slow)
   uint8_t tail;     // jf::Tail
   uint8_t body;     // jf::Body
 };
 
-constexpr size_t kMaxVerts = 840;  // the largest mesh in the table has 810
-constexpr size_t kMaxTris = 1110;  // ... and 1080
+constexpr size_t kMaxVerts = 940;   // the largest mesh in the table (An-225, gear down) has 924
+constexpr size_t kMaxTris = 1290;   // ... and 1276
 
 struct Vertex {
   float x, y, z;  // x forward (nose +x), y to the right wing, z up; metres

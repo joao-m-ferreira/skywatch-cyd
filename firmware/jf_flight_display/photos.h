@@ -13,6 +13,8 @@ struct Photo {
   bool tried;         // looked up already (also when no photo was found)
 };
 
+// Contact (email or URL) sent in the User-Agent, as planespotters.net requires.
+void photoSetContact(const char* contact);
 // The cached photo for a registration, or nullptr when there is none (yet).
 const Photo* photoFor(const char* reg);
 // Looks the registration up (blocking, ~1-3 s) unless it was tried before.

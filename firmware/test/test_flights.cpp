@@ -4,6 +4,7 @@
 
 #include "../jf_flight_display/board.h"
 #include "../jf_flight_display/airline.h"
+#include "../jf_flight_display/config.h"
 #include "../jf_flight_display/flights.h"
 #include "../jf_flight_display/model3d.h"
 #include "../jf_flight_display/silhouette.h"
@@ -56,6 +57,18 @@ int main() {
   CHECK(strcmp(f[0].reg, "OE-IJA") == 0 || f[0].reg[0] == '\0');
   CHECK(strcmp(f[1].callsign, "TAP93MA") == 0);
 
+  char rt[40];
+  CHECK(jf::formatRoute("Murcia", "RMU", "Dublin", "DUB", rt, 27) && strcmp(rt, "Murcia > Dublin") == 0);
+  CHECK(jf::formatRoute("Frankfurt am Main", "FRA", "Santiago de Compostela", "SCQ", rt, 27) &&
+        strlen(rt) <= 26 && strstr(rt, " > ") != nullptr);
+  CHECK(jf::formatRoute("", "LIS", "", "OPO", rt, 27) && strcmp(rt, "LIS > OPO") == 0);
+  CHECK(jf::formatRoute("Lisbon", "LIS", "", "", rt, 27) && strcmp(rt, "from Lisbon") == 0);
+  CHECK(jf::formatRoute("", "", "Porto", "OPO", rt, 27) && strcmp(rt, "to Porto") == 0);
+  CHECK(!jf::formatRoute("", "", "", "", rt, 27) && rt[0] == '\0');
+  CHECK(!jf::formatRoute(nullptr, nullptr, nullptr, nullptr, rt, 27));
+  char tiny[8];
+  CHECK(jf::formatRoute("Lisbon", "LIS", "Porto", "OPO", tiny, sizeof tiny) && strlen(tiny) < sizeof tiny);
+
   char b[16];
   jf::formatAltitude(3500, b, sizeof b);
   CHECK(strcmp(b, "3500 ft") == 0);
@@ -71,7 +84,7 @@ int main() {
   CHECK(strcmp(jf::compass(225), "SW") == 0);
   CHECK(strcmp(jf::compass(-90), "W") == 0);
 
-  CHECK(jf::backlightFor(-5) == 20);
+  CHECK(jf::backlightFor(-5) == 90);
   CHECK(jf::backlightFor(4095) == 255);
   CHECK(jf::backlightFor(99999) == 255);
 
@@ -106,7 +119,7 @@ int main() {
   // indices and finite coordinates, and projects inside its box, sorted far to near.
   jf::Palette pal = {{252, 250, 242}, {222, 222, 228}, {200, 20, 40}, {40, 40, 40},
                      {150, 190, 220}, {44, 32, 22},    {255, 255, 255}, {205, 205, 210},
-                     {200, 20, 40},   0,               jf::kTailDisc, jf::kBodyCheat};
+                     {200, 20, 40},   0,               1,             jf::kTailDisc, jf::kBodyCheat};
   static jf::ScreenTri tris[jf::kMaxTris];
   size_t checked = 0;
   auto checkType = [&](const char* ty) {
@@ -177,6 +190,27 @@ int main() {
       CHECK(strcmp(jf::airlineAt(i).icao, jf::airlineAt(j).icao) != 0);
   }
   CHECK(jf::airlineFor("AEE7PT") != nullptr);
+  {
+    const int ca[3] = {0, 0, 200}, cb[3] = {240, 200, 0};
+    int o[3];
+    jf::ledBlend(ca, cb, 0, o);
+    CHECK(o[0] == 0 && o[2] == 200);                        // starts on colour A
+    jf::ledBlend(ca, cb, 1000, o);
+    CHECK(o[0] == 0 && o[2] == 200);                        // still holding A
+    jf::ledBlend(ca, cb, 1400, o);
+    CHECK(o[0] == 120 && o[2] == 100);                      // halfway through the fade
+    jf::ledBlend(ca, cb, 2000, o);
+    CHECK(o[0] == 240 && o[1] == 200 && o[2] == 0);         // holding B (yellow) for 1.2 s
+    jf::ledBlend(ca, cb, 3200 + 100, o);
+    CHECK(o[0] == 0 && o[2] == 200);                        // the cycle repeats
+  }
+  CHECK(jf::airlineHasTwoColours(*jf::airlineFor("RYR8XY")));    // blue + yellow
+  CHECK(jf::airlineHasTwoColours(*jf::airlineFor("TAP123")));    // green + red
+  CHECK(jf::airlineHasTwoColours(*jf::airlineFor("EIN123")));    // teal + lime
+  CHECK(!jf::airlineHasTwoColours(*jf::airlineFor("EZY123")));   // orange + dark grey
+  CHECK(!jf::airlineHasTwoColours(*jf::airlineFor("ACA123")));   // red + black
+  CHECK(!jf::airlineHasTwoColours(*jf::airlineFor("KLM123")));   // sky blue + navy: one colour family
+  CHECK(!jf::airlineHasTwoColours(*jf::airlineFor("SWR123")));   // red + grey
   for (size_t i = 0; i < jf::liveryCount(); ++i) {  // every livery row names a known airline
     char cs[8];
     snprintf(cs, sizeof cs, "%s1", jf::liveryCode(i));
@@ -186,6 +220,69 @@ int main() {
   CHECK(jf::liveryFor(jf::airlineFor("JST446")).body == jf::kBodyBelly);
   CHECK(jf::liveryFor(nullptr).tail == jf::kTailBand);
   CHECK(jf::looksLikeAirlineCallsign("QQQ123") && !jf::looksLikeAirlineCallsign("CS-DXX"));
+
+  {  // serial configuration
+    jf::Config c;
+    jf::configDefaults(&c, "your-ssid", "pw", 38.7223, -9.1393, 40, "you@example.com");
+    char r[1800];  // the help text is long
+    CHECK(!jf::configWifiReady(c));
+    CHECK(jf::configCommand(&c, "set ssid My Home WiFi", r, sizeof r) == jf::CmdAction::Changed);
+    CHECK(strcmp(c.ssid, "My Home WiFi") == 0 && jf::configWifiReady(c));  // spaces kept
+    CHECK(jf::configCommand(&c, "set pass hunter 2 !", r, sizeof r) == jf::CmdAction::Changed);
+    CHECK(strcmp(c.pass, "hunter 2 !") == 0);
+    CHECK(jf::configCommand(&c, "  SET   LAT   41.15  ", r, sizeof r) == jf::CmdAction::Changed);
+    CHECK(c.lat > 41.14 && c.lat < 41.16);
+    CHECK(jf::configCommand(&c, "set lat 91", r, sizeof r) == jf::CmdAction::None && c.lat < 42.0);
+    CHECK(strstr(r, "error") != nullptr);
+    CHECK(jf::configCommand(&c, "set lat abc", r, sizeof r) == jf::CmdAction::None);
+    CHECK(!c.auto_loc);  // fixing lat turned the IP lookup off
+    CHECK(jf::configCommand(&c, "set location auto", r, sizeof r) == jf::CmdAction::Changed && c.auto_loc);
+    CHECK(jf::configCommand(&c, "set location mars", r, sizeof r) == jf::CmdAction::None);
+    CHECK(jf::configCommand(&c, "set location static 41.15 -8.62", r, sizeof r) == jf::CmdAction::Changed);
+    CHECK(!c.auto_loc && c.lat > 41.14 && c.lat < 41.16 && c.lon < -8.61 && c.lon > -8.63);
+    CHECK(jf::configCommand(&c, "set location static 91 0", r, sizeof r) == jf::CmdAction::None);
+    CHECK(jf::configCommand(&c, "set location static 41.15", r, sizeof r) == jf::CmdAction::None);
+    CHECK(jf::configCommand(&c, "show", r, sizeof r) == jf::CmdAction::None && strstr(r, "location static") != nullptr);
+    CHECK(jf::configCommand(&c, "set location auto", r, sizeof r) == jf::CmdAction::Changed);
+    CHECK(jf::configCommand(&c, "show", r, sizeof r) == jf::CmdAction::None && strstr(r, "geojs.io") != nullptr);
+    CHECK(jf::configCommand(&c, "set lon -8.6", r, sizeof r) == jf::CmdAction::Changed && !c.auto_loc);
+    CHECK(!c.tz_set);
+    CHECK(strcmp(jf::posixTzFor("Europe/Lisbon"), "WET0WEST,M3.5.0/1,M10.5.0") == 0);
+    CHECK(jf::posixTzFor("Mars/Olympus") == nullptr && jf::posixTzFor(nullptr) == nullptr);
+    CHECK(jf::configCommand(&c, "set lon -181", r, sizeof r) == jf::CmdAction::None);
+    CHECK(jf::configCommand(&c, "set lon -8.6", r, sizeof r) == jf::CmdAction::Changed);
+    CHECK(jf::configCommand(&c, "set radius 0", r, sizeof r) == jf::CmdAction::None);
+    CHECK(jf::configCommand(&c, "set radius 251", r, sizeof r) == jf::CmdAction::None);
+    CHECK(jf::configCommand(&c, "set radius 25", r, sizeof r) == jf::CmdAction::Changed && c.radius_km == 25);
+    CHECK(jf::configCommand(&c, "set contact no", r, sizeof r) == jf::CmdAction::None);
+    CHECK(jf::configCommand(&c, "set contact me@site.org", r, sizeof r) == jf::CmdAction::Changed);
+    CHECK(jf::configCommand(&c, "set night 22 6", r, sizeof r) == jf::CmdAction::Changed);
+    CHECK(c.night_on && c.night_start == 22 && c.night_end == 6);
+    CHECK(jf::configCommand(&c, "set night 24 6", r, sizeof r) == jf::CmdAction::None);
+    CHECK(jf::configCommand(&c, "set night 5", r, sizeof r) == jf::CmdAction::None);
+    CHECK(jf::isNightHour(c, 23) && jf::isNightHour(c, 0) && jf::isNightHour(c, 5));  // wraps midnight
+    CHECK(!jf::isNightHour(c, 6) && !jf::isNightHour(c, 12) && !jf::isNightHour(c, 21));
+    jf::configCommand(&c, "set night 1 5", r, sizeof r);
+    CHECK(jf::isNightHour(c, 1) && jf::isNightHour(c, 4) && !jf::isNightHour(c, 5) && !jf::isNightHour(c, 0));
+    jf::configCommand(&c, "set night off", r, sizeof r);
+    CHECK(!c.night_on && !jf::isNightHour(c, 2));
+    jf::configCommand(&c, "set night on", r, sizeof r);
+    CHECK(c.night_on);
+    CHECK(jf::configCommand(&c, "set tz CET-1CEST,M3.5.0,M10.5.0/3", r, sizeof r) == jf::CmdAction::Changed && c.tz_set);
+    CHECK(jf::configCommand(&c, "set colour red", r, sizeof r) == jf::CmdAction::None);
+    CHECK(strstr(r, "unknown setting") != nullptr);
+    CHECK(jf::configCommand(&c, "frobnicate", r, sizeof r) == jf::CmdAction::None);
+    CHECK(jf::configCommand(&c, "", r, sizeof r) == jf::CmdAction::None && r[0] == '\0');
+    CHECK(jf::configCommand(&c, "show", r, sizeof r) == jf::CmdAction::None);
+    CHECK(strstr(r, "My Home WiFi") != nullptr && strstr(r, "hunter") == nullptr && strstr(r, "****") != nullptr);
+    CHECK(jf::configCommand(&c, "help", r, sizeof r) == jf::CmdAction::None && strstr(r, "set night") != nullptr);
+    CHECK(jf::configCommand(&c, "reboot", r, sizeof r) == jf::CmdAction::Reboot);
+    CHECK(jf::configCommand(&c, "factory", r, sizeof r) == jf::CmdAction::Factory);
+    CHECK(jf::configCommand(&c, "set pass -", r, sizeof r) == jf::CmdAction::Changed && c.pass[0] == '\0');
+    char small[16];  // tiny reply buffers never overflow
+    jf::configCommand(&c, "help", small, sizeof small);
+    CHECK(strlen(small) < sizeof small);
+  }
 
   if (failures == 0) printf("all firmware host tests passed\n");
   return failures ? 1 : 0;

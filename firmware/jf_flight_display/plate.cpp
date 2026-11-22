@@ -105,7 +105,7 @@ void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
   uint16_t pri = g.color565(120, 130, 150), sec = g.color565(90, 95, 105);
   jf::Palette pal = {{252, 250, 242}, {222, 222, 228}, {120, 130, 150}, {90, 95, 105},
                      {150, 190, 220}, {44, 32, 22},    {255, 255, 255}, {205, 205, 210},
-                     {120, 130, 150}, lv.nose_red,     lv.tail, lv.body};
+                     {120, 130, 150}, lv.nose_red,     0,       lv.tail, lv.body};
   if (al != nullptr) {
     pal.primary = {al->r1, al->g1, al->b1};
     pal.secondary = {al->r2, al->g2, al->b2};
@@ -130,6 +130,7 @@ void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
   }
   pal.belly = {static_cast<uint8_t>(pal.hull.r * 0.88f), static_cast<uint8_t>(pal.hull.g * 0.88f),
                static_cast<uint8_t>(pal.hull.b * 0.9f)};
+  pal.gear = (f.alt_ft < 1500 && f.speed_kt < 200) ? 1 : 0;  // landing gear down when low and slow
   const bool right = f.track > 0 && f.track < 180;  // eastbound: nose to the right
   bool shown_photo = false;
   if (photo != nullptr && photo->jpg != nullptr) shown_photo = drawPhoto(g, *photo, c);

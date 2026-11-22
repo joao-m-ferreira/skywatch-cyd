@@ -33,6 +33,12 @@ int adsbToFlights(const JsonDocument& doc, double lat, double lon, double radius
 int parseAdsb(const char* json, size_t len, double lat, double lon, double radius_km,
               Flight* out, size_t max);
 
+// Header text for a route, e.g. "Murcia > Dublin". Prefers city names, falls back to IATA codes
+// when the cities do not fit in `n`, and handles a missing origin or destination.
+// Returns false (and leaves `out` empty) when nothing is known.
+bool formatRoute(const char* o_city, const char* o_iata, const char* d_city, const char* d_iata,
+                 char* out, size_t n);
+
 // "FL120" at or above 6000 ft (typical transition), else "3500 ft".
 void formatAltitude(int alt_ft, char* buf, size_t n);
 // 8-point compass name for a bearing in degrees ("N", "NE", ...).
@@ -40,7 +46,7 @@ const char* compass(int bearing);
 // "12.3 km" under 100 km, else "123 km".
 void formatDistance(float km, char* buf, size_t n);
 
-// LDR reading (0..4095, higher = brighter) to backlight duty 20..255.
+// LDR reading (0..4095, higher = brighter) to backlight duty 90..255.
 int backlightFor(int ldr_raw);
 
 }  // namespace jf

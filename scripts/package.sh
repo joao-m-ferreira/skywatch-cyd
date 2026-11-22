@@ -7,7 +7,7 @@ VERSION="${VERSION:-0.0.0-dev}"
 rm -rf dist build/pkg && mkdir -p dist build/pkg
 cp -R firmware/jf_flight_display build/pkg/jf_flight_display
 cp build/pkg/jf_flight_display/secrets.h.example build/pkg/jf_flight_display/secrets.h
-arduino-cli compile --fqbn esp32:esp32:esp32 build/pkg/jf_flight_display \
+arduino-cli compile --fqbn esp32:esp32:esp32:PartitionScheme=huge_app build/pkg/jf_flight_display \
   --build-path build/pkg/out --export-binaries >/dev/null
 cp build/pkg/out/jf_flight_display.ino.bin "dist/jf-flight-display-${VERSION}-firmware.bin"
 (cd service && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-X main.version=${VERSION}" \

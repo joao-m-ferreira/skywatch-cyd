@@ -86,6 +86,24 @@ static void addWinglet(float x_le0, float x_te0, float z0, float y0, float x_le1
   addSlab(p, q, col);
 }
 
+// A wheel: an 8-sided prism whose axis runs along y, centred at (x, y, z).
+static void addWheel(float x, float y, float z, float r, float w, Rgb col) {
+  constexpr int M = 8;
+  size_t a[M], b[M];
+  for (int k = 0; k < M; ++k) {
+    const float th = 2.0f * static_cast<float>(M_PI) * static_cast<float>(k) / M;
+    a[k] = addV(x + r * cosf(th), y - w / 2, z + r * sinf(th));
+    b[k] = addV(x + r * cosf(th), y + w / 2, z + r * sinf(th));
+  }
+  const size_t ca = addV(x, y - w / 2, z), cb = addV(x, y + w / 2, z);
+  for (int k = 0; k < M; ++k) {
+    const int n = (k + 1) % M;
+    addQuad(a[k], a[n], b[n], b[k], col);
+    addT(ca, a[k], a[n], col);
+    addT(cb, b[k], b[n], col);
+  }
+}
+
 // Cylinder/cone along x from x0 (front) to x1 (back) centred at (y, z).
 static void addCyl(float x0, float x1, float y, float z, float r0, float r1, Rgb body,
                    Rgb front_cap) {
@@ -300,9 +318,13 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   const float dih = high ? 0.01f * b : 0.07f * b;
   const float y_root = 0.6f * R;
   const float x_le = h - s.wing_pos * L;
-  const float x_le_tip = x_le - (b - y_root) * tanL, x_te = x_le - s.root_chord;
-  const float x_te_tip = x_le_tip - s.tip_chord;
-  const float t_root = 0.12f * s.root_chord, t_tip = 0.10f * s.tip_chord + 0.02f;
+  // Wing chords are drawn ~30% larger than real: the fuselage is fattened for legibility too.
+  const float rc = s.root_chord * 1.3f, tcd = s.tip_chord * 1.25f;
+  const float x_le_tip = x_le - (b - y_root) * tanL, x_te = x_le - rc;
+  const float x_te_tip = x_le_tip - tcd;
+  const float t_root = 0.15f * rc, t_tip = 0.12f * tcd + 0.03f;
+  const Rgb wingc = {static_cast<uint8_t>(pal.hull.r * 0.93f), static_cast<uint8_t>(pal.hull.g * 0.93f),
+                     static_cast<uint8_t>(pal.hull.b * 0.95f)};  // slightly grey: shows the planform
   auto leAt = [&](float ye) { return x_le - (ye - y_root) * tanL; };
   auto zAt = [&](float ye) { return z_root + dih * (ye - y_root) / (b - y_root); };
 
@@ -337,20 +359,26 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
     for (int sg = -1; sg <= 1; sg += 2) {
       addCyl(front, front - pl, sg * ye, zc, 0.6f * nw, 0.5f * nw, pal.engine, pal.engine);
       const float pr = 1.7f * nw, px = front + 0.02f * nw;  // propeller: two crossed blades
-      const size_t a0 = addV(px, sg * ye - 0.06f * nw, zc + pr), a1 = addV(px, sg * ye + 0.06f * nw, zc + pr);
-      const size_t a2 = addV(px, sg * ye + 0.06f * nw, zc - pr), a3 = addV(px, sg * ye - 0.06f * nw, zc - pr);
+      const size_t a0 = addV(px, sg * ye - 0.09f * nw, zc + pr), a1 = addV(px, sg * ye + 0.09f * nw, zc + pr);
+      const size_t a2 = addV(px, sg * ye + 0.09f * nw, zc - pr), a3 = addV(px, sg * ye - 0.09f * nw, zc - pr);
       addQuad(a0, a1, a2, a3, pal.dark);
+      const size_t c0 = addV(px, sg * ye - pr, zc - 0.09f * nw), c1 = addV(px, sg * ye + pr, zc - 0.09f * nw);
+      const size_t c2 = addV(px, sg * ye + pr, zc + 0.09f * nw), c3 = addV(px, sg * ye - pr, zc + 0.09f * nw);
+      addQuad(c0, c1, c2, c3, pal.dark);  // second blade: a cross reads as a propeller
     }
   } else if (s.mount == Mount::Prop) {
     const float pr = 0.73f * D, px = h + 0.03f * D;
-    const size_t a0 = addV(px, -0.05f * D, pr), a1 = addV(px, 0.05f * D, pr);
-    const size_t a2 = addV(px, 0.05f * D, -pr), a3 = addV(px, -0.05f * D, -pr);
+    const size_t a0 = addV(px, -0.06f * D, pr), a1 = addV(px, 0.06f * D, pr);
+    const size_t a2 = addV(px, 0.06f * D, -pr), a3 = addV(px, -0.06f * D, -pr);
     addQuad(a0, a1, a2, a3, pal.dark);
+    const size_t c0 = addV(px, -pr, -0.06f * D), c1 = addV(px, pr, -0.06f * D);
+    const size_t c2 = addV(px, pr, 0.06f * D), c3 = addV(px, -pr, 0.06f * D);
+    addQuad(c0, c1, c2, c3, pal.dark);
   }
 
   for (int sg = -1; sg <= 1; sg += 2) {
     addHorizontal(static_cast<float>(sg), y_root, b, x_le, x_te, x_le_tip, x_te_tip, z_root,
-                  z_root + dih, t_root, t_tip, pal.hull);
+                  z_root + dih, t_root, t_tip, wingc);
     const float zt = z_root + dih, S = s.span, ht = 0.03f * D;
     switch (wingletFor(type, s)) {
       case kWFence:  // small fence above and below the tip
@@ -394,6 +422,19 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
                     0.03f * D, 0.02f * D, pal.hull);
     }
   }
+  // --- Landing gear (only when the plane is low and slow). ---
+  if (pal.gear) {
+    const float leg = (high ? 0.8f : 0.95f) * R, rw = (D >= 5.0f ? 0.11f : 0.14f) * D, ww = 0.55f * rw;
+    const float zw = -R - leg;
+    const float xn = h - 0.16f * L, xm = x_le - 0.55f * rc, ym = (D >= 5.0f ? 0.17f : 0.21f) * b;
+    addVertical(xn + 0.02f * D, xn - 0.02f * D, -0.7f * R, xn + 0.02f * D, xn - 0.02f * D, zw, 0, 0.02f * D, pal.dark);
+    addWheel(xn, 0, zw, rw * 0.9f, 2.4f * ww, pal.dark);
+    for (int sg = -1; sg <= 1; sg += 2) {
+      addVertical(xm + 0.03f * D, xm - 0.03f * D, -0.6f * R, xm + 0.03f * D, xm - 0.03f * D, zw, sg * ym, 0.02f * D, pal.dark);
+      addWheel(xm, sg * ym, zw, rw, 3.0f * ww, pal.dark);
+      if (D >= 5.0f) addWheel(xm - 2.6f * rw, sg * ym, zw, rw, 3.0f * ww, pal.dark);  // wide-body bogie
+    }
+  }
   // --- Windows and doors (overlays on both sides). ---
   if (windows) {
     const int N = static_cast<int>(fminf(26.0f, fmaxf(10.0f, roundf(L * 0.6f))));  // scaled to the real count
@@ -413,7 +454,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
       for (int d = 0; d < (four ? 4 : 2); ++d) addOverlay(dx[d] - dw / 2, dx[d] + dw / 2, -0.10f * R, 0.52f * R, y_d, sg, doorc);
       if (!four && s.mount == Mount::UnderWing) {  // over-wing exits
         for (int e = 0; e < 2; ++e) {
-          const float ex = x_le - (0.35f + 0.28f * static_cast<float>(e)) * s.root_chord;
+          const float ex = x_le - (0.35f + 0.28f * static_cast<float>(e)) * rc;
           addOverlay(ex - 0.07f * R, ex + 0.07f * R, 0.14f * R, 0.46f * R, y_d, sg, doorc);
         }
       }
@@ -427,20 +468,20 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
 size_t projectMesh(const Mesh& m, bool facing_right, int cx, int cy, int box_w, int box_h,
                    ScreenTri* out, size_t cap) {
   // Fixed scratch (no heap allocation: repeated malloc/free fragmented the heap on the board):
-  // projected x/y, view-space x/y and depth for every vertex.
-  static float vx[kMaxVerts], vy[kMaxVerts], wx[kMaxVerts], wy[kMaxVerts], vd[kMaxVerts];
-  const float yaw = rad(-40.0f), pitch = rad(18.0f);
+  // projected x/y and depth for every vertex (view-space x/y are recomputed from them).
+  static float vx[kMaxVerts], vy[kMaxVerts], vd[kMaxVerts];
+  const float yaw = rad(-40.0f), pitch = rad(24.0f), roll = rad(7.0f);  // seen from above, banked slightly
+  const float cr = cosf(roll), sr = sinf(roll);
   const float cyw = cosf(yaw), syw = sinf(yaw), cp = cosf(pitch), sp = sinf(pitch);
   const float extent = fmaxf(m.length, 1.0f), dist = 3.0f * extent;
   float minx = 1e9f, maxx = -1e9f, miny = 1e9f, maxy = -1e9f;
   for (size_t i = 0; i < m.nv; ++i) {
-    const float x1 = m.v[i].x * cyw - m.v[i].y * syw, y1 = m.v[i].x * syw + m.v[i].y * cyw;
+    const float ry = m.v[i].y * cr - m.v[i].z * sr, rz = m.v[i].y * sr + m.v[i].z * cr;  // bank
+    const float x1 = m.v[i].x * cyw - ry * syw, y1 = m.v[i].x * syw + ry * cyw;
     float X = x1;
     if (!facing_right) X = -X;
-    const float U = m.v[i].z * cp + y1 * sp, d = y1 * cp - m.v[i].z * sp;
+    const float U = rz * cp + y1 * sp, d = y1 * cp - rz * sp;
     const float s = dist / (dist + d);
-    wx[i] = X;
-    wy[i] = U;
     vd[i] = d;
     vx[i] = X * s;
     vy[i] = U * s;
@@ -468,12 +509,14 @@ size_t projectMesh(const Mesh& m, bool facing_right, int cx, int cy, int box_w, 
       const bool overlay = t.ox != 0 || t.oy != 0 || t.oz != 0;
       if (overlay != (pass == 1)) continue;
       if (overlay) {  // skip overlays on the far side of the fuselage
-        const float ox = t.ox, oy = t.oy, oz = t.oz;
+        const float ox = t.ox, oy = t.oy * cr - t.oz * sr, oz = t.oy * sr + t.oz * cr;  // banked normal
         const float y1 = ox * syw + oy * cyw;
         if (y1 * cp - oz * sp >= 0.0f) continue;
       }
-      const float ax = wx[t.b] - wx[t.a], ay = wy[t.b] - wy[t.a], ad = vd[t.b] - vd[t.a];
-      const float bx = wx[t.c] - wx[t.a], by = wy[t.c] - wy[t.a], bd = vd[t.c] - vd[t.a];
+      auto wx = [&](uint16_t i) { return vx[i] * (dist + vd[i]) / dist; };  // undo the perspective
+      auto wy = [&](uint16_t i) { return vy[i] * (dist + vd[i]) / dist; };
+      const float ax = wx(t.b) - wx(t.a), ay = wy(t.b) - wy(t.a), ad = vd[t.b] - vd[t.a];
+      const float bx = wx(t.c) - wx(t.a), by = wy(t.c) - wy(t.a), bd = vd[t.c] - vd[t.a];
       float nx = ay * bd - ad * by, ny = ad * bx - ax * bd, nd = ax * by - ay * bx;
       const float nl = sqrtf(nx * nx + ny * ny + nd * nd);
       if (nl < 1e-6f) continue;  // degenerate

@@ -5,4 +5,4 @@ cd "$(dirname "$0")/.."
 [ -f firmware/jf_flight_display/secrets.h ] || cp firmware/jf_flight_display/secrets.h.example firmware/jf_flight_display/secrets.h
 mkdir -p build
 (cd service && go build -o ../build/flights-service .)
-arduino-cli compile --fqbn esp32:esp32:esp32 firmware/jf_flight_display --build-path build/firmware
+arduino-cli compile --fqbn esp32:esp32:esp32:PartitionScheme=huge_app firmware/jf_flight_display --build-path build/firmware

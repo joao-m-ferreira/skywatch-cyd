@@ -99,6 +99,46 @@ int parseAdsb(const char* json, size_t len, double lat, double lon, double radiu
   return adsbToFlights(doc, lat, lon, radius_km, out, max);
 }
 
+static void shortCity(const char* city, size_t max, char* out) {  // cut at a word boundary
+  if (city == nullptr) city = "";
+  size_t len = strlen(city);
+  if (len <= max) {
+    memcpy(out, city, len + 1);
+    return;
+  }
+  size_t cut = max;
+  for (size_t i = max; i > max / 2; --i) {
+    if (city[i] == ' ' || city[i] == '-') {
+      cut = i;
+      break;
+    }
+  }
+  memcpy(out, city, cut);
+  out[cut] = '\0';
+}
+
+bool formatRoute(const char* o_city, const char* o_iata, const char* d_city, const char* d_iata,
+                 char* out, size_t n) {
+  if (n == 0) return false;
+  out[0] = '\0';
+  const bool has_o = (o_iata != nullptr && o_iata[0]) || (o_city != nullptr && o_city[0]);
+  const bool has_d = (d_iata != nullptr && d_iata[0]) || (d_city != nullptr && d_city[0]);
+  if (!has_o && !has_d) return false;
+  const size_t half = n > 8 ? (n - 4) / 2 : 4;  // room for " > " around two names
+  char a[32], b[32];
+  shortCity(o_city, half, a);
+  shortCity(d_city, half, b);
+  if (has_o && has_d) {
+    if (a[0] && b[0]) snprintf(out, n, "%s > %s", a, b);
+    else snprintf(out, n, "%s > %s", (o_iata && o_iata[0]) ? o_iata : a, (d_iata && d_iata[0]) ? d_iata : b);
+  } else if (has_o) {
+    snprintf(out, n, "from %s", a[0] ? a : o_iata);
+  } else {
+    snprintf(out, n, "to %s", b[0] ? b : d_iata);
+  }
+  return true;
+}
+
 void formatAltitude(int alt_ft, char* buf, size_t n) {
   if (alt_ft >= 6000) {
     snprintf(buf, n, "FL%03d", alt_ft / 100);
@@ -124,7 +164,7 @@ void formatDistance(float km, char* buf, size_t n) {
 int backlightFor(int ldr_raw) {
   if (ldr_raw < 0) ldr_raw = 0;
   if (ldr_raw > 4095) ldr_raw = 4095;
-  return 20 + (ldr_raw * 235) / 4095;
+  return 90 + (ldr_raw * 165) / 4095;  // never below ~35%: a dark room must not look like "off"
 }
 
 }  // namespace jf

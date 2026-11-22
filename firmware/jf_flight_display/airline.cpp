@@ -213,6 +213,42 @@ static const LiveryRow kLiveries[] = {
     {"QLK", {kTailSolid, kBodyCheat, 1, 0, kFinPrimary, kHullWhite, 0}},
 };
 
+static void rgbToHsv(int r, int g, int b, float* h, float* s, float* v) {
+  const int mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
+  const int mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+  *v = static_cast<float>(mx);
+  *s = mx > 0 ? static_cast<float>(mx - mn) / static_cast<float>(mx) : 0.0f;
+  float hue = 0.0f;
+  if (mx != mn) {
+    const float d = static_cast<float>(mx - mn);
+    if (mx == r) hue = 60.0f * (static_cast<float>(g - b) / d);
+    else if (mx == g) hue = 60.0f * (2.0f + static_cast<float>(b - r) / d);
+    else hue = 60.0f * (4.0f + static_cast<float>(r - g) / d);
+    if (hue < 0.0f) hue += 360.0f;
+  }
+  *h = hue;
+}
+
+bool airlineHasTwoColours(const Airline& a) {
+  float h1, s1, v1, h2, s2, v2;
+  rgbToHsv(a.r1, a.g1, a.b1, &h1, &s1, &v1);
+  rgbToHsv(a.r2, a.g2, a.b2, &h2, &s2, &v2);
+  if (s2 < 0.45f || v2 < 100.0f) return false;  // grey, black or white (or too dark to see)
+  float dh = h1 > h2 ? h1 - h2 : h2 - h1;
+  if (dh > 180.0f) dh = 360.0f - dh;
+  return dh >= 40.0f;  // a different colour, not just another shade of the same one
+}
+
+void ledBlend(const int a[3], const int b[3], unsigned long ms, int out[3]) {
+  const unsigned long p = ms % 3200;
+  float t;  // 0 = a, 1 = b
+  if (p < 1200) t = 0.0f;
+  else if (p < 1600) t = static_cast<float>(p - 1200) / 400.0f;
+  else if (p < 2800) t = 1.0f;
+  else t = 1.0f - static_cast<float>(p - 2800) / 400.0f;
+  for (int i = 0; i < 3; ++i) out[i] = static_cast<int>(static_cast<float>(a[i]) + static_cast<float>(b[i] - a[i]) * t);
+}
+
 Livery liveryFor(const Airline* a) {
   if (a != nullptr) {
     for (const LiveryRow& r : kLiveries) {

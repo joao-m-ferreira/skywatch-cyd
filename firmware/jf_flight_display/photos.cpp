@@ -33,10 +33,12 @@ Photo* claim(const char* reg) {
   return p;
 }
 
+char contactBuf[64] = PLANESPOTTERS_CONTACT;
+
 void userAgent(HTTPClient& http) {
   // planespotters.net requires a contact in the User-Agent.
-  static char ua[96];
-  snprintf(ua, sizeof ua, "jf-flight-display/1.0 (+mailto:%s)", PLANESPOTTERS_CONTACT);
+  static char ua[112];
+  snprintf(ua, sizeof ua, "jf-flight-display/1.0 (+mailto:%s)", contactBuf);
   http.setUserAgent(ua);
 }
 
@@ -88,6 +90,11 @@ uint8_t* getBytes(const char* url, size_t* len) {
 }
 
 }  // namespace
+
+void photoSetContact(const char* contact) {
+  strncpy(contactBuf, contact, sizeof contactBuf - 1);
+  contactBuf[sizeof contactBuf - 1] = '\0';
+}
 
 const Photo* photoFor(const char* reg) {
   if (reg == nullptr || reg[0] == '\0') return nullptr;
