@@ -9,5 +9,5 @@ bad="$(gofmt -l service)"
 [ -z "$bad" ] || { echo "gofmt needed on:" >&2; echo "$bad" >&2; exit 1; }
 (cd service && go vet ./...)
 g++ -std=c++17 -fsyntax-only -Wall -Wextra -Werror -pedantic -I"$AJ_DIR" \
-  firmware/jf_flight_display/flights.cpp firmware/jf_flight_display/silhouette.cpp firmware/jf_flight_display/airline.cpp firmware/test/test_flights.cpp
+  firmware/jf_flight_display/flights.cpp firmware/jf_flight_display/silhouette.cpp firmware/jf_flight_display/airline.cpp firmware/jf_flight_display/model3d.cpp firmware/test/test_flights.cpp
 python3 scripts/check_review_tier.py --self-test >/dev/null

@@ -163,6 +163,11 @@ void loop() {
     lastLdr = now;
     updateBacklight();
   }
-  if (redraw || now < 1000) drawScreen();
+  if (redraw || now < 1000) {
+    const uint32_t t0 = millis();
+    drawScreen();
+    Serial.printf("drawn in %u ms, free heap %u\n", static_cast<unsigned>(millis() - t0),
+                  static_cast<unsigned>(ESP.getFreeHeap()));
+  }
   delay(20);
 }

@@ -5,6 +5,7 @@
 #include "../jf_flight_display/board.h"
 #include "../jf_flight_display/airline.h"
 #include "../jf_flight_display/flights.h"
+#include "../jf_flight_display/model3d.h"
 #include "../jf_flight_display/silhouette.h"
 
 static int failures = 0;
@@ -95,42 +96,40 @@ int main() {
   CHECK(jf::categorize("") == Category::Jet);
   CHECK(jf::categorize(nullptr) == Category::Jet);
 
-  int sx, sy;  // side view: nose (-x) points left, or right when mirrored
-  jf::transformSide(-10, 2, false, 2, 100, 100, &sx, &sy);
-  CHECK(sx == 80 && sy == 104);
-  jf::transformSide(-10, 2, true, 2, 100, 100, &sx, &sy);
-  CHECK(sx == 120 && sy == 104);
   // Per-type silhouettes: every spec resolves to itself (no shadowing by an earlier,
   // shorter prefix) and generates convex, in-bounds polygons.
   for (size_t i = 0; i < jf::specCount(); ++i) {
     CHECK(&jf::specFor(jf::specAt(i).prefix) == &jf::specAt(i));
   }
-  const char* types[] = {"A319", "A320", "A321", "A388", "B744", "B77W", "B789", "B738", "E190",
-                         "CRJ9", "AT76", "DH8D", "C172", "GLF5", "EC35", "ZZZZ", "", "A35K", "A343"};
-  for (const char* ty : types) {
-    const jf::Shape& sh = jf::shapeForType(ty);
-    CHECK(sh.count > 0 && sh.count <= jf::kMaxPolys && sh.scale > 0.0f && sh.half_len > 0.0f);
-    CHECK(sh.top < 0.0f && sh.bottom > 0.0f);
-    CHECK(sh.half_len <= jf::specFor(ty).length * 0.56f);   // nothing sticks out past the ends
-    CHECK(sh.half_len >= jf::specFor(ty).length * 0.49f);
-    for (size_t p = 0; p < sh.count; ++p) {
-      const size_t n = sh.polys[p].n;
-      CHECK(n >= 3 && n <= jf::kMaxPolyPoints);
-      CHECK(sh.polys[p].part >= jf::kHull && sh.polys[p].part <= jf::kDark);
-      int pos = 0, neg = 0;  // convex: the renderer fills polygons as a triangle fan
-      for (size_t i = 0; i < n; ++i) {
-        CHECK(sh.polys[p].x[i] >= -sh.half_len - 0.01f && sh.polys[p].x[i] <= sh.half_len + 0.01f);
-        CHECK(sh.polys[p].y[i] >= sh.top - 0.01f && sh.polys[p].y[i] <= sh.bottom + 0.01f);
-        const size_t j = (i + 1) % n, k = (i + 2) % n;
-        float cr = (sh.polys[p].x[j] - sh.polys[p].x[i]) * (sh.polys[p].y[k] - sh.polys[p].y[j]) -
-                   (sh.polys[p].y[j] - sh.polys[p].y[i]) * (sh.polys[p].x[k] - sh.polys[p].x[j]);
-        if (cr > 1e-5f) ++pos;
-        if (cr < -1e-5f) ++neg;
-      }
-      if (!(pos == 0 || neg == 0)) printf("non-convex poly %zu (part %d) of '%s'\n", p, sh.polys[p].part, ty);
-      CHECK(pos == 0 || neg == 0);
+  // 3D models: every spec (and the class fallbacks) builds within the mesh limits, with valid
+  // indices and finite coordinates, and projects inside its box, sorted far to near.
+  const jf::Palette pal = {{252, 250, 242}, {222, 222, 228}, {200, 20, 40}, {40, 40, 40},
+                           {150, 190, 220}, {44, 32, 22}};
+  static jf::ScreenTri tris[jf::kMaxTris];
+  size_t checked = 0;
+  auto checkType = [&](const char* ty) {
+    const jf::Mesh& m = jf::buildAircraft(ty, pal);
+    CHECK(m.nv > 8 && m.nv < jf::kMaxVerts && m.nt > 8 && m.nt < jf::kMaxTris);
+    for (size_t i = 0; i < m.nv; ++i) {
+      CHECK(m.v[i].x == m.v[i].x && m.v[i].y == m.v[i].y && m.v[i].z == m.v[i].z);  // not NaN
     }
-  }
+    for (size_t i = 0; i < m.nt; ++i) CHECK(m.t[i].a < m.nv && m.t[i].b < m.nv && m.t[i].c < m.nv);
+    for (int right = 0; right < 2; ++right) {
+      const size_t n = jf::projectMesh(m, right != 0, 100, 100, 150, 120, tris, jf::kMaxTris);
+      CHECK(n > m.nt / 2);
+      for (size_t i = 0; i < n; ++i) {
+        for (int k = 0; k < 3; ++k) {
+          CHECK(tris[i].x[k] >= 100 - 76 && tris[i].x[k] <= 100 + 76);   // inside the box (+1px)
+          CHECK(tris[i].y[k] >= 100 - 61 && tris[i].y[k] <= 100 + 61);
+        }
+        if (i > 0) CHECK(tris[i - 1].depth >= tris[i].depth);
+      }
+    }
+    ++checked;
+  };
+  for (size_t i = 0; i < jf::specCount(); ++i) checkType(jf::specAt(i).prefix);
+  for (const char* ty : {"", "ZZZZ", "EC35", "C172", "GLF5", "AT76", "CRJ9"}) checkType(ty);
+  CHECK(checked == jf::specCount() + 7);
   // Types look different from each other.
   CHECK(jf::specFor("A319").length < jf::specFor("A320").length);
   CHECK(jf::specFor("A320").length < jf::specFor("A321").length);
@@ -139,6 +138,10 @@ int main() {
   CHECK(jf::specFor("CRJ9").mount == jf::Mount::Rear);
   CHECK(jf::specFor("AT76").mount == jf::Mount::Prop);
   CHECK(jf::specFor("EC35").mount == jf::Mount::Heli);
+  {  // a longer type has a longer 3D model
+    const float l319 = jf::buildAircraft("A319", pal).length, l321 = jf::buildAircraft("A321", pal).length;
+    CHECK(l319 < l321);
+  }
 
   const jf::Airline* a = jf::airlineFor("RYR8XY");
   CHECK(a != nullptr && strcmp(a->name, "Ryanair") == 0 && a->b1 == 144);
