@@ -12,6 +12,7 @@ constexpr size_t kMaxFlights = 8;
 struct Flight {
   char callsign[12];
   char type[8];
+  char reg[10];  // registration, e.g. "CS-TNA" (empty if unknown)
   int alt_ft;
   int speed_kt;
   int track;

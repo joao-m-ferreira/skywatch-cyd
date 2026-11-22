@@ -283,12 +283,11 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   }
   const bool windows = D >= 2.0f;
   const bool neo = isNeo(type);
-  const Rgb window = {static_cast<uint8_t>(pal.glass.r * 0.45f), static_cast<uint8_t>(pal.glass.g * 0.5f),
-                      static_cast<uint8_t>(pal.glass.b * 0.6f)};
+  const Rgb window = {38, 52, 78};  // dark slate: reads as a continuous window band
   loft(rg, nr, [&](size_t i, int j) {
-    if (i >= 4 && i <= 6 && (j == 10 || j == 11 || j == 0 || j == 1)) return pal.glass;  // windshield
+    if (i >= 5 && i <= 6 && (j == 11 || j == 0 || j == 1)) return pal.glass;  // windshield
     if (pal.nose_red && i < 4) return pal.primary;                       // red nose cone
-    if (neo && i >= 4 && i <= 6 && (j == 9 || j == 2)) return pal.dark;  // "raccoon mask"
+    if (neo && i >= 5 && i <= 6 && (j == 10 || j == 2)) return pal.dark;  // "raccoon mask"
     if (pal.body == kBodyFull && !(i >= 4 && i <= 6 && j == 0)) return pal.primary;
     if (pal.body == kBodyBelly && i >= 5 && (j >= 3 && j <= 8)) return pal.primary;          // coloured belly
     if (j == 3 || j == 8) return i >= 5 ? pal.primary : pal.hull;                            // cheatline
@@ -397,11 +396,11 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   }
   // --- Windows and doors (overlays on both sides). ---
   if (windows) {
-    const int N = static_cast<int>(fminf(26.0f, fmaxf(8.0f, roundf(L * 0.5f))));  // scaled to the real count
-    const float xs = h - nc * 1.05f, xe = -h + tc * 0.95f, pitch = (xs - xe) / N, ww = 0.55f * pitch;
-    const float zc = 0.22f * R, hh = 0.09f * R, yw = sqrtf(R * R - zc * zc);
-    const Rgb doorc = {static_cast<uint8_t>(pal.belly.r * 0.88f), static_cast<uint8_t>(pal.belly.g * 0.88f),
-                       static_cast<uint8_t>(pal.belly.b * 0.9f)};
+    const int N = static_cast<int>(fminf(26.0f, fmaxf(10.0f, roundf(L * 0.6f))));  // scaled to the real count
+    const float xs = h - nc * 1.05f, xe = -h + tc * 0.95f, pitch = (xs - xe) / N, ww = 0.8f * pitch;
+    const float zc = 0.24f * R, hh = 0.12f * R, yw = sqrtf(R * R - zc * zc);
+    const Rgb doorc = {static_cast<uint8_t>(pal.hull.r * 0.95f), static_cast<uint8_t>(pal.hull.g * 0.95f),
+                       static_cast<uint8_t>(pal.hull.b * 0.96f)};  // doors: barely darker than the hull
     for (int sg = -1; sg <= 1; sg += 2) {
       for (int k = 0; k < N; ++k) {
         const float xk = xs - pitch * (static_cast<float>(k) + 0.5f);
@@ -409,7 +408,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
       }
       // Doors: front and rear; wide-bodies and the A321 family also have two more by the wing.
       const bool four = D >= 5.0f || hasPrefix(type, "A321") || hasPrefix(type, "A21N");
-      const float dw = 0.30f * R, y_d = sg * 0.95f * R;
+      const float dw = 0.22f * R, y_d = sg * 0.95f * R;
       float dx[4] = {xs + 0.045f * L, xe - 0.035f * L, x_le + 0.06f * L, x_te - 0.05f * L};
       for (int d = 0; d < (four ? 4 : 2); ++d) addOverlay(dx[d] - dw / 2, dx[d] + dw / 2, -0.10f * R, 0.52f * R, y_d, sg, doorc);
       if (!four && s.mount == Mount::UnderWing) {  // over-wing exits
@@ -427,10 +426,9 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
 
 size_t projectMesh(const Mesh& m, bool facing_right, int cx, int cy, int box_w, int box_h,
                    ScreenTri* out, size_t cap) {
-  // One temporary block: projected x/y, view-space x/y, depth for every vertex.
-  float* buf = static_cast<float*>(malloc(5 * m.nv * sizeof(float)));
-  if (buf == nullptr) return 0;
-  float *vx = buf, *vy = buf + m.nv, *wx = buf + 2 * m.nv, *wy = buf + 3 * m.nv, *vd = buf + 4 * m.nv;
+  // Fixed scratch (no heap allocation: repeated malloc/free fragmented the heap on the board):
+  // projected x/y, view-space x/y and depth for every vertex.
+  static float vx[kMaxVerts], vy[kMaxVerts], wx[kMaxVerts], wy[kMaxVerts], vd[kMaxVerts];
   const float yaw = rad(-40.0f), pitch = rad(18.0f);
   const float cyw = cosf(yaw), syw = sinf(yaw), cp = cosf(pitch), sp = sinf(pitch);
   const float extent = fmaxf(m.length, 1.0f), dist = 3.0f * extent;
@@ -501,7 +499,6 @@ size_t projectMesh(const Mesh& m, bool facing_right, int cx, int cy, int box_w, 
       ++n;
     }
   }
-  free(buf);
   // Far to near (painter's algorithm): body first, then the overlays on top of it.
   auto far_first = [](const ScreenTri& a, const ScreenTri& b) { return a.depth > b.depth; };
   std::sort(out, out + n_base, far_first);

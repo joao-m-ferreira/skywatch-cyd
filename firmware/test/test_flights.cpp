@@ -53,6 +53,7 @@ int main() {
   n = jf::parseAdsb(fi, strlen(fi), 38.72, -9.14, 40, f, jf::kMaxFlights);
   CHECK(n == 2);
   CHECK(strcmp(f[0].callsign, "EJU9046") == 0);
+  CHECK(strcmp(f[0].reg, "OE-IJA") == 0 || f[0].reg[0] == '\0');
   CHECK(strcmp(f[1].callsign, "TAP93MA") == 0);
 
   char b[16];

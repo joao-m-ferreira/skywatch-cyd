@@ -1,8 +1,11 @@
 #include "plate.h"
 
+#include <math.h>
 #include <stdio.h>
 
 #include "airline.h"
+#include <TJpg_Decoder.h>
+
 #include "livery.h"
 #include "board.h"
 #include "model3d.h"
@@ -30,6 +33,54 @@ void frame(lgfx::LovyanGFX& g, const Colors& c, const char* left, const char* ri
   g.drawFastHLine(10, 30, board::kScreenW - 20, c.ink);
 }
 
+lgfx::LovyanGFX* gPhotoGfx = nullptr;
+int gPhotoX = 0, gPhotoY = 0;
+
+// Decoder callback: draws a block straight to the screen, dropping every 4th row and
+// column (nearest-neighbour 3/4 downscale: a 200 px thumbnail becomes 150 px).
+bool photoBlock(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
+  for (uint16_t r = 0; r < h; ++r) {
+    const int sy = y + r;
+    if (sy % 4 == 3) continue;
+    const int dy = sy - sy / 4;
+    for (uint16_t cc = 0; cc < w; ++cc) {
+      const int sx = x + cc;
+      if (sx % 4 == 3) continue;
+      gPhotoGfx->drawPixel(gPhotoX + sx - sx / 4, gPhotoY + dy, bitmap[r * w + cc]);
+    }
+  }
+  return true;
+}
+
+// Decodes the JPEG straight into the left panel. False on failure.
+bool drawPhoto(lgfx::LovyanGFX& g, const jf::Photo& ph, const Colors& c) {
+  uint16_t jw = 0, jh = 0;
+  if (TJpgDec.getJpgSize(&jw, &jh, ph.jpg, ph.len) != 0 || jw == 0 || jw > 220 || jh > 160) return false;
+  const int ow = jw - jw / 4, oh = jh - jh / 4;
+  gPhotoGfx = &g;
+  gPhotoX = 92 - ow / 2;
+  gPhotoY = 46 + (116 - oh) / 2;
+  TJpgDec.setJpgScale(1);
+  TJpgDec.setCallback(photoBlock);
+  const bool ok = TJpgDec.drawJpg(0, 0, ph.jpg, ph.len) == 0;
+  if (ok) g.drawRect(gPhotoX - 1, gPhotoY - 1, ow + 2, oh + 2, c.faint);
+  gPhotoGfx = nullptr;
+  return ok;
+}
+
+// Compass dial: red north marker at the top, an arrow along the direction of travel.
+void drawCompass(lgfx::LovyanGFX& g, const Colors& c, int cx, int cy, int r, int track) {
+  g.drawCircle(cx, cy, r, c.faint);
+  g.fillTriangle(cx - 3, cy - r - 1, cx + 3, cy - r - 1, cx, cy - r - 6, c.accent);  // north
+  const float a = static_cast<float>(track) * static_cast<float>(M_PI) / 180.0f;
+  const float dx = sinf(a), dy = -cosf(a), px = -dy, py = dx;  // direction and its normal
+  const float len = static_cast<float>(r) - 2.0f, w = 0.42f * static_cast<float>(r);
+  const float bx = cx - 0.45f * len * dx, by = cy - 0.45f * len * dy;  // arrow base
+  g.fillTriangle(static_cast<int>(lroundf(cx + len * dx)), static_cast<int>(lroundf(cy + len * dy)),
+                 static_cast<int>(lroundf(bx + w * px)), static_cast<int>(lroundf(by + w * py)),
+                 static_cast<int>(lroundf(bx - w * px)), static_cast<int>(lroundf(by - w * py)), c.ink);
+}
+
 void field(lgfx::LovyanGFX& g, const Colors& c, int y, const char* label, const char* value) {
   g.setTextDatum(lgfx::top_left);
   g.setFont(&lgfx::fonts::Font2);
@@ -42,7 +93,7 @@ void field(lgfx::LovyanGFX& g, const Colors& c, int y, const char* label, const 
 }  // namespace
 
 void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
-               const char* header_left, const char* header_right) {
+               const char* header_left, const char* header_right, const jf::Photo* photo) {
   const Colors c = colors(g);
   g.startWrite();
   frame(g, c, header_left, header_right);
@@ -80,33 +131,45 @@ void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
   pal.belly = {static_cast<uint8_t>(pal.hull.r * 0.88f), static_cast<uint8_t>(pal.hull.g * 0.88f),
                static_cast<uint8_t>(pal.hull.b * 0.9f)};
   const bool right = f.track > 0 && f.track < 180;  // eastbound: nose to the right
-  const jf::Mesh& mesh = jf::buildAircraft(f.type, pal);
-  jf::ScreenTri* tris =
-      static_cast<jf::ScreenTri*>(malloc(jf::kMaxTris * sizeof(jf::ScreenTri)));  // freed below
-  if (tris != nullptr) {
-    const size_t n = jf::projectMesh(mesh, right, 92, 112, 146, 128, tris, jf::kMaxTris);
-    const uint16_t outline = g.color565(20, 24, 32);
-    for (int o = 0; o < 4; ++o) {  // 1 px dark outline around the silhouette
-      const int dx = (o == 0) - (o == 1), dy = (o == 2) - (o == 3);
+  bool shown_photo = false;
+  if (photo != nullptr && photo->jpg != nullptr) shown_photo = drawPhoto(g, *photo, c);
+  if (!shown_photo) {
+    const jf::Mesh& mesh = jf::buildAircraft(f.type, pal);
+    static jf::ScreenTri tris[jf::kMaxTris];  // fixed buffer: no per-draw heap allocation
+    {
+      const size_t n = jf::projectMesh(mesh, right, 92, 112, 146, 128, tris, jf::kMaxTris);
+      const uint16_t outline = g.color565(20, 24, 32);
+      for (int o = 0; o < 4; ++o) {  // 1 px dark outline around the silhouette
+        const int dx = (o == 0) - (o == 1), dy = (o == 2) - (o == 3);
+        for (size_t i = 0; i < n; ++i) {
+          const jf::ScreenTri& t = tris[i];
+          g.fillTriangle(t.x[0] + dx, t.y[0] + dy, t.x[1] + dx, t.y[1] + dy, t.x[2] + dx,
+                         t.y[2] + dy, outline);
+        }
+      }
       for (size_t i = 0; i < n; ++i) {
         const jf::ScreenTri& t = tris[i];
-        g.fillTriangle(t.x[0] + dx, t.y[0] + dy, t.x[1] + dx, t.y[1] + dy, t.x[2] + dx,
-                       t.y[2] + dy, outline);
+        g.fillTriangle(t.x[0], t.y[0], t.x[1], t.y[1], t.x[2], t.y[2],
+                       g.color565(t.color.r, t.color.g, t.color.b));
       }
-    }
-    for (size_t i = 0; i < n; ++i) {
-      const jf::ScreenTri& t = tris[i];
-      g.fillTriangle(t.x[0], t.y[0], t.x[1], t.y[1], t.x[2], t.y[2],
-                     g.color565(t.color.r, t.color.g, t.color.b));
-    }
-    free(tris);
+      }
   }
-  g.setFont(&lgfx::fonts::Font2);
-  g.setTextDatum(lgfx::middle_center);
-  g.setTextColor(c.faint);
-  char hdg[16];
-  snprintf(hdg, sizeof hdg, right ? "heading E >" : "< heading W");
-  g.drawString(hdg, 92, 190);
+  if (shown_photo) {  // credit the photographer
+    char credit[40];
+    snprintf(credit, sizeof credit, "Photo: %.26s", photo->credit);
+    g.setFont(&lgfx::fonts::Font2);
+    g.setTextDatum(lgfx::middle_center);
+    g.setTextColor(c.faint);
+    g.drawString(credit, 92, 170);
+  }
+  // Compass with the direction of travel.
+  drawCompass(g, c, 40, 192, 12, f.track);
+  char hdg[24];
+  snprintf(hdg, sizeof hdg, "%s  %03d", jf::compass(f.track), f.track);
+  g.setFont(&lgfx::fonts::FreeSansBold9pt7b);
+  g.setTextDatum(lgfx::middle_left);
+  g.setTextColor(c.ink);
+  g.drawString(hdg, 62, 192);
 
   // Page dots.
   const int dots = count > 8 ? 8 : count;

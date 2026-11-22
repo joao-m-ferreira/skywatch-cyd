@@ -23,8 +23,8 @@ struct Palette {
   uint8_t body;     // jf::Body
 };
 
-constexpr size_t kMaxVerts = 1000;
-constexpr size_t kMaxTris = 1300;
+constexpr size_t kMaxVerts = 840;  // the largest mesh in the table has 810
+constexpr size_t kMaxTris = 1110;  // ... and 1080
 
 struct Vertex {
   float x, y, z;  // x forward (nose +x), y to the right wing, z up; metres
@@ -53,8 +53,8 @@ struct ScreenTri {
 };
 
 // Projects the mesh into a (box_w x box_h) box centred at (cx, cy), nose to the right
-// unless !facing_right. Triangles are written far-to-near. Returns how many. Uses a
-// temporary heap buffer (freed before returning); `out` must hold kMaxTris entries.
+// unless !facing_right. Triangles are written far-to-near. Returns how many. Uses static
+// scratch (not reentrant); `out` must hold kMaxTris entries.
 size_t projectMesh(const Mesh& mesh, bool facing_right, int cx, int cy, int box_w, int box_h,
                    ScreenTri* out, size_t cap);
 

@@ -7,6 +7,7 @@
 #include "board.h"
 #include "display.h"
 #include "flights.h"
+#include "photos.h"
 #include "plate.h"
 #include "secrets.h"  // copy secrets.h.example -> secrets.h (git-ignored)
 
@@ -117,7 +118,8 @@ void drawScreen() {
     return;
   }
   if (selected >= flightCount) selected = 0;
-  drawPlate(tft, flights[selected], selected, flightCount, left, right);
+  drawPlate(tft, flights[selected], selected, flightCount, left, right,
+            jf::photoFor(flights[selected].reg));
 }
 
 void updateBacklight() {
@@ -168,6 +170,11 @@ void loop() {
     drawScreen();
     Serial.printf("drawn in %u ms, free heap %u\n", static_cast<unsigned>(millis() - t0),
                   static_cast<unsigned>(ESP.getFreeHeap()));
+    // Photos: fetch the current plane's first (redraw when it arrives), then the next one's.
+    if (flightCount > 0) {
+      if (jf::photoPrefetch(flights[selected].reg)) drawScreen();
+      if (flightCount > 1) jf::photoPrefetch(flights[(selected + 1) % flightCount].reg);
+    }
   }
   delay(20);
 }

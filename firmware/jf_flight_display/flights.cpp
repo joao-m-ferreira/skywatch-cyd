@@ -72,6 +72,7 @@ int adsbToFlights(const JsonDocument& doc, double lat, double lon, double radius
     if (f.callsign[0] == '\0') copyStr(f.callsign, sizeof f.callsign, o["r"] | "");
     if (f.callsign[0] == '\0') continue;
     copyStr(f.type, sizeof f.type, o["t"] | "");
+    copyStr(f.reg, sizeof f.reg, o["r"] | "");
     f.alt_ft = o["alt_baro"].as<int>();
     f.speed_kt = static_cast<int>(lround(o["gs"] | 0.0));
     f.track = static_cast<int>(lround(o["track"] | 0.0));
