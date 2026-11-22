@@ -32,7 +32,7 @@ One **ESP32-2432S028R** (2.8" ILI9341, resistive touch, RGB LED, light sensor) a
 cable, roughly €15–25. Capacitive "IPS" variants use different touch pins and are not supported.
 
 ## Install
-Download the latest files from [Releases](../../releases) and flash with `esptool`
+Download the latest files from [Releases](https://github.com/joao-m-ferreira/skywatch-cyd/releases) and flash with `esptool`
 (`pip install esptool`):
 
 ```sh
