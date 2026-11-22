@@ -1,6 +1,7 @@
 #include "flights.h"
 
 #include <ArduinoJson.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -33,6 +34,80 @@ int parseFlights(const char* json, size_t len, Flight* out, size_t max) {
     ++n;
   }
   return static_cast<int>(n);
+}
+
+void adsbFilter(JsonDocument& filter) {
+  JsonObject a = filter["ac"][0].to<JsonObject>();
+  a["flight"] = true;
+  a["t"] = true;
+  a["r"] = true;
+  a["lat"] = true;
+  a["lon"] = true;
+  a["alt_baro"] = true;
+  a["gs"] = true;
+  a["track"] = true;
+}
+
+static double rad(double d) { return d * M_PI / 180.0; }
+
+static void distBearing(double lat1, double lon1, double lat2, double lon2, double* km,
+                        int* brg) {
+  double dLat = rad(lat2 - lat1), dLon = rad(lon2 - lon1);
+  double a = sin(dLat / 2) * sin(dLat / 2) +
+             cos(rad(lat1)) * cos(rad(lat2)) * sin(dLon / 2) * sin(dLon / 2);
+  *km = 2 * 6371.0 * asin(sqrt(a));
+  double y = sin(dLon) * cos(rad(lat2));
+  double x = cos(rad(lat1)) * sin(rad(lat2)) - sin(rad(lat1)) * cos(rad(lat2)) * cos(dLon);
+  double b = fmod(atan2(y, x) * 180.0 / M_PI + 360.0, 360.0);
+  *brg = static_cast<int>(lround(b)) % 360;
+}
+
+int adsbToFlights(const JsonDocument& doc, double lat, double lon, double radius_km,
+                  Flight* out, size_t max) {
+  JsonArrayConst arr = doc["ac"].as<JsonArrayConst>();
+  if (arr.isNull() || max == 0) return 0;
+  size_t n = 0;
+  for (JsonObjectConst o : arr) {
+    if (!o["lat"].is<double>() || !o["lon"].is<double>()) continue;
+    if (!o["alt_baro"].is<int>()) continue;  // "ground" or missing: not airborne
+    double km;
+    int brg;
+    distBearing(lat, lon, o["lat"].as<double>(), o["lon"].as<double>(), &km, &brg);
+    if (km > radius_km) continue;
+    if (n == max && static_cast<float>(km) >= out[n - 1].dist_km) continue;
+    Flight f;
+    const char* cs = o["flight"] | "";
+    while (*cs == ' ') ++cs;
+    copyStr(f.callsign, sizeof f.callsign, cs);
+    for (int i = static_cast<int>(strlen(f.callsign)) - 1; i >= 0 && f.callsign[i] == ' '; --i)
+      f.callsign[i] = '\0';
+    if (f.callsign[0] == '\0') copyStr(f.callsign, sizeof f.callsign, o["r"] | "");
+    if (f.callsign[0] == '\0') continue;
+    copyStr(f.type, sizeof f.type, o["t"] | "");
+    f.alt_ft = o["alt_baro"].as<int>();
+    f.speed_kt = static_cast<int>(lround(o["gs"] | 0.0));
+    f.track = static_cast<int>(lround(o["track"] | 0.0));
+    f.dist_km = static_cast<float>(lround(km * 10) / 10.0);
+    f.bearing = brg;
+    size_t i = (n < max) ? n++ : max - 1;  // insert sorted, dropping the farthest
+    while (i > 0 && out[i - 1].dist_km > f.dist_km) {
+      out[i] = out[i - 1];
+      --i;
+    }
+    out[i] = f;
+  }
+  return static_cast<int>(n);
+}
+
+int parseAdsb(const char* json, size_t len, double lat, double lon, double radius_km,
+              Flight* out, size_t max) {
+  JsonDocument filter, doc;
+  adsbFilter(filter);
+  if (json == nullptr ||
+      deserializeJson(doc, json, len, DeserializationOption::Filter(filter)))
+    return -1;
+  if (doc["ac"].isNull()) return -1;
+  return adsbToFlights(doc, lat, lon, radius_km, out, max);
 }
 
 void formatAltitude(int alt_ft, char* buf, size_t n) {

@@ -3,6 +3,8 @@
 #pragma once
 #include <stddef.h>
 
+#include <ArduinoJson.h>
+
 namespace jf {
 
 constexpr size_t kMaxFlights = 8;
@@ -20,6 +22,17 @@ struct Flight {
 // Parses {"f":[{cs,ty,alt,spd,trk,km,brg},...]}. Returns the number of flights
 // stored (0..max) or -1 when the payload is not valid.
 int parseFlights(const char* json, size_t len, Flight* out, size_t max);
+
+// Keys to keep when parsing an ADS-B (adsb.fi / adsb.lol v2) response, so a large
+// payload fits in RAM. Pass to DeserializationOption::Filter.
+void adsbFilter(JsonDocument& filter);
+// Turns a (filtered) ADS-B document into the nearest airborne flights, nearest first:
+// drops ground/no-position aircraft and anything beyond radius_km. Returns the count.
+int adsbToFlights(const JsonDocument& doc, double lat, double lon, double radius_km,
+                  Flight* out, size_t max);
+// Convenience for tests: filter + parse + convert from a buffer; -1 if invalid.
+int parseAdsb(const char* json, size_t len, double lat, double lon, double radius_km,
+              Flight* out, size_t max);
 
 // "FL120" at or above 6000 ft (typical transition), else "3500 ft".
 void formatAltitude(int alt_ft, char* buf, size_t n);

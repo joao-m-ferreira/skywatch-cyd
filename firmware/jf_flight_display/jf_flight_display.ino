@@ -1,7 +1,8 @@
 // Nearby-flights display for the ESP32-2432S028 (CYD).
-// Fetches compact JSON from the Go service in ../../service. Without WiFi or
-// a reachable service it falls back to built-in demo data.
+// Standalone: fetches ADS-B data from adsb.fi directly. Without WiFi it falls back
+// to built-in demo data.
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <WiFi.h>
 
 #include "board.h"
@@ -34,22 +35,30 @@ bool connectWifi() {
   return WiFi.status() == WL_CONNECTED;
 }
 
+// Standalone: query adsb.fi open data directly (HTTPS) and filter while streaming so the
+// large response never has to fit in RAM.
 bool fetchFlights() {
   if (WiFi.status() != WL_CONNECTED && !connectWifi()) return false;
-  char url[192];
-  snprintf(url, sizeof url, "%s/v1/flights?lat=%.4f&lon=%.4f&radius_km=%d&n=%d", SERVICE_URL,
-           static_cast<double>(HOME_LAT), static_cast<double>(HOME_LON), RADIUS_KM,
-           static_cast<int>(jf::kMaxFlights));
+  char url[128];
+  snprintf(url, sizeof url, "https://opendata.adsb.fi/api/v2/lat/%.2f/lon/%.2f/dist/%d",
+           static_cast<double>(HOME_LAT), static_cast<double>(HOME_LON),
+           static_cast<int>(RADIUS_KM / 1.852) + 1);
+  // Public read-only data, no credentials sent: certificate validation is skipped to
+  // avoid shipping/expiring a CA bundle. Do not reuse this client for anything private.
+  WiFiClientSecure client;
+  client.setInsecure();
   HTTPClient http;
-  http.setTimeout(8000);
-  if (!http.begin(url)) return false;
-  if (SERVICE_TOKEN[0] != '\0') http.addHeader("X-Token", SERVICE_TOKEN);
+  http.useHTTP10(true);  // no chunked encoding: the stream is plain JSON
+  http.setTimeout(10000);
+  if (!http.begin(client, url)) return false;
   bool ok = false;
   if (http.GET() == HTTP_CODE_OK) {
-    String body = http.getString();
-    int n = jf::parseFlights(body.c_str(), body.length(), flights, jf::kMaxFlights);
-    if (n >= 0) {
-      flightCount = n;
+    JsonDocument filter, doc;
+    jf::adsbFilter(filter);
+    if (!deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter)) &&
+        !doc["ac"].isNull()) {
+      flightCount = jf::adsbToFlights(doc, HOME_LAT, HOME_LON, RADIUS_KM, flights,
+                                      jf::kMaxFlights);
       ok = true;
     }
   }
