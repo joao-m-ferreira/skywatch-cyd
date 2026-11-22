@@ -4,6 +4,7 @@
 #include <WiFiClientSecure.h>
 #include <WiFi.h>
 
+#include "airline.h"
 #include "board.h"
 #include "display.h"
 #include "flights.h"
@@ -109,6 +110,8 @@ bool fetchFlights() {
   return false;
 }
 
+void ledForPlane(const jf::Flight* f);  // defined below
+
 void drawScreen() {
   char left[32], right[24];
   snprintf(right, sizeof right, "%d/%d", selected + 1, flightCount);
@@ -122,13 +125,42 @@ void drawScreen() {
   }
   if (flightCount == 0) {
     right[0] = '\0';
+    ledForPlane(nullptr);
     drawPlateMessage(tft, fetchFailed ? "Fetch failed" : "No aircraft in range",
                      fetchFailed ? lastError : "", left, right, fetchFailed);
     return;
   }
   if (selected >= flightCount) selected = 0;
+  ledForPlane(&flights[selected]);
   drawPlate(tft, flights[selected], selected, flightCount, left, right,
             jf::photoFor(flights[selected].reg));
+}
+
+// RGB LED on the back of the board (active low). Shows the airline's primary colour;
+// colours are normalised to full brightness for their hue, then dimmed (the LED is bright).
+void setLed(int r, int g, int b) {
+  const int peak = r > g ? (r > b ? r : b) : (g > b ? g : b);
+  const float k = peak > 0 ? 255.0f / static_cast<float>(peak) * 0.35f : 0.0f;
+  ledcWrite(board::kLedR, 255 - static_cast<int>(static_cast<float>(r) * k));
+  ledcWrite(board::kLedG, 255 - static_cast<int>(static_cast<float>(g) * k));
+  ledcWrite(board::kLedB, 255 - static_cast<int>(static_cast<float>(b) * k));
+}
+
+void setupLed() {
+  for (int pin : {board::kLedR, board::kLedG, board::kLedB}) ledcAttach(pin, 5000, 8);
+  setLed(0, 0, 0);
+  const int test[3][3] = {{255, 0, 0}, {0, 255, 0}, {0, 0, 255}};  // boot test: R, G, B
+  for (const auto& c : test) {
+    setLed(c[0], c[1], c[2]);
+    delay(250);
+  }
+  setLed(0, 0, 0);
+}
+
+void ledForPlane(const jf::Flight* f) {
+  const jf::Airline* al = f != nullptr ? jf::airlineFor(f->callsign) : nullptr;
+  if (al != nullptr) setLed(al->r1, al->g1, al->b1);
+  else setLed(0, 0, 0);  // unknown operator or no aircraft: LED off
 }
 
 void updateBacklight() {
@@ -140,6 +172,7 @@ void setup() {
   Serial.begin(115200);
   tft.init();
   tft.setRotation(1);  // 320x240 landscape
+  setupLed();
   drawPlateMessage(tft, "Connecting...", WIFI_SSID, "Flights nearby", "", false);
   connectWifi();  // a failure is retried by fetchFlights() in loop()
   lastPoll = millis() - kPollMs;

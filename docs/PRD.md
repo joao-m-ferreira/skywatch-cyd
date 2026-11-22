@@ -2,7 +2,7 @@
 
 **Problem.** Show nearby aircraft live on an ESP32-2432S028 (320x240 ILI9341 + XPT2046 touch).
 
-**v1 scope.** Standalone ESP32 (no companion server): queries adsb.fi directly over WiFi from `secrets.h`; one location and radius; one-plane-at-a-time "plate" screen on paper background (callsign, airline name and livery colours from the callsign prefix, type, shaded 3D model of the aircraft type with a per-airline livery (fuselage scheme and tint, tail design, engine colour), facing its direction of flight, altitude, speed/track, distance, bearing); carousel through the nearest planes (auto-advance every 6 s, touch to skip; the selected plane is kept across refreshes); LDR backlight dimming; on-screen error reason when WiFi or the fetch fails. No demo mode.
+**v1 scope.** Standalone ESP32 (no companion server): queries adsb.fi directly over WiFi from `secrets.h`; one location and radius; one-plane-at-a-time "plate" screen on paper background (callsign, airline name and livery colours from the callsign prefix, type, shaded 3D model of the aircraft type with a per-airline livery (fuselage scheme and tint, tail design, engine colour), facing its direction of flight, altitude, speed/track, distance, bearing); carousel through the nearest planes (auto-advance every 6 s, touch to skip; the selected plane is kept across refreshes); LDR backlight dimming; the back RGB LED shows the airline's primary colour (off when unknown); on-screen error reason when WiFi or the fetch fails. No demo mode.
 
 **Out of scope v1.** AI-painted images, weather/news, airline logos/routes/airline names, web settings portal.
 
