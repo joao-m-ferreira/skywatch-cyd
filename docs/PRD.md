@@ -6,6 +6,6 @@
 
 **Out of scope v1.** AI-painted images, weather/news, airline logos/routes/airline names, web settings portal.
 
-**Success criteria.** Firmware compiles in CI; Go service tests pass on recorded fixtures; host-side parsing/format tests pass; on hardware a plane appears within ~20 s of boot (manual check).
+**Success criteria.** Firmware compiles in CI; the optional Go service tests pass on recorded fixtures; host-side parsing/format tests pass; on hardware a plane appears within ~20 s of boot (manual check).
 
-**Known gaps vs the stated v1 idea.** Route and airline name are not implemented yet (the service has no adsbdb lookup); callsign + type are shown instead.
+**Known gaps vs the stated v1 idea.** Route and airline name are not implemented yet (no adsbdb lookup yet); callsign + type are shown instead.
