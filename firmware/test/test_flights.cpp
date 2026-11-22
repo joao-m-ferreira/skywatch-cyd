@@ -108,6 +108,19 @@ int main() {
     CHECK(sh.count > 0 && sh.scale > 0.0f);
     for (size_t p = 0; p < sh.count; ++p) {
       CHECK(sh.polys[p].n >= 3 && sh.polys[p].n <= jf::kMaxPolyPoints);
+      CHECK(sh.polys[p].part >= 0 && sh.polys[p].part <= 3);
+      {  // convex (the renderer fills polygons as a triangle fan)
+        int pos = 0, neg = 0;
+        const size_t n = sh.polys[p].n;
+        for (size_t i = 0; i < n; ++i) {
+          const size_t j = (i + 1) % n, k = (i + 2) % n;
+          float cr = (sh.polys[p].x[j] - sh.polys[p].x[i]) * (sh.polys[p].y[k] - sh.polys[p].y[j]) -
+                     (sh.polys[p].y[j] - sh.polys[p].y[i]) * (sh.polys[p].x[k] - sh.polys[p].x[j]);
+          if (cr > 1e-6f) ++pos;
+          if (cr < -1e-6f) ++neg;
+        }
+        CHECK(pos == 0 || neg == 0);
+      }
       for (size_t i = 0; i < sh.polys[p].n; ++i) {
         CHECK(sh.polys[p].x[i] >= -1.0f && sh.polys[p].x[i] <= 1.0f);
         CHECK(sh.polys[p].y[i] >= -1.0f && sh.polys[p].y[i] <= 1.0f);

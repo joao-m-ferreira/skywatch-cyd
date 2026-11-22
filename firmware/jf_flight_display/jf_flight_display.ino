@@ -12,6 +12,7 @@
 
 namespace {
 constexpr uint32_t kPollMs = 20000;
+constexpr uint32_t kRotateMs = 6000;  // carousel: seconds each plane stays on screen
 constexpr uint32_t kWifiTimeoutMs = 15000;
 
 LGFX tft;
@@ -21,6 +22,7 @@ int selected = 0;
 bool fetchFailed = false;
 char lastError[48] = "";
 uint32_t lastPoll = 0;
+uint32_t lastRotate = 0;
 
 bool connectWifi() {
   WiFi.mode(WIFI_STA);
@@ -73,8 +75,15 @@ bool fetchFlights() {
       DeserializationError err =
           deserializeJson(doc, body, DeserializationOption::Filter(filter));
       if (!err && jf::adsbValid(doc)) {
-        flightCount = jf::adsbToFlights(doc, HOME_LAT, HOME_LON, RADIUS_KM, flights,
-                                        jf::kMaxFlights);
+      // Keep showing the same plane across refreshes when it is still in range.
+      char keep[sizeof flights[0].callsign] = "";
+      if (flightCount > 0) strncpy(keep, flights[selected].callsign, sizeof keep - 1);
+      flightCount = jf::adsbToFlights(doc, HOME_LAT, HOME_LON, RADIUS_KM, flights,
+                                      jf::kMaxFlights);
+      selected = 0;
+      for (int i = 0; i < flightCount; ++i) {
+        if (strcmp(flights[i].callsign, keep) == 0) selected = i;
+      }
         ok = true;
         lastError[0] = '\0';
       } else {
@@ -89,7 +98,8 @@ bool fetchFlights() {
 }
 
 void drawScreen() {
-  const char* note = "LIVE";
+  char note[24] = "LIVE";
+  if (flightCount > 0) snprintf(note, sizeof note, "LIVE %d/%d", selected + 1, flightCount);
   if (flightCount == 0) {
     drawPlateMessage(tft, fetchFailed ? "Fetch failed" : "No aircraft in range",
                      fetchFailed ? lastError : "", note, fetchFailed);
@@ -127,9 +137,15 @@ void loop() {
   if (tft.getTouch(&x, &y)) {
     if (flightCount > 0) {
       selected = (selected + 1) % flightCount;
+      lastRotate = now;
       redraw = true;
     }
     delay(300);  // debounce
+  }
+  if (flightCount > 1 && now - lastRotate >= kRotateMs) {  // carousel
+    selected = (selected + 1) % flightCount;
+    lastRotate = now;
+    redraw = true;
   }
   static uint32_t lastLdr = 0;
   if (now - lastLdr > 1000) {

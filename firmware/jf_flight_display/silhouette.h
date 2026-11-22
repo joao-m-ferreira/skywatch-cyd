@@ -20,7 +20,8 @@ struct Poly {
   float x[kMaxPolyPoints];
   float y[kMaxPolyPoints];
   bool mirror;
-  // 0 fuselage, 1 wings (primary livery colour); 2 tail, 3 engines/details (secondary).
+  // 0 fuselage, 1 wings/tailplane (hull colour); 2 fin (primary livery colour);
+  // 3 engines (secondary livery colour).
   int part;
 };
 

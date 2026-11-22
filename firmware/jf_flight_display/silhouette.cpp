@@ -50,38 +50,67 @@ Category categorize(const char* t) {
   return Category::Jet;
 }
 
-// ---- Shapes: left-half polygons are mirrored where `mirror` is true. ----
+// ---- Shapes. Polygons are convex, listed in DRAW ORDER (later ones paint on top).
+// Half-polygons (mirror = true) are reflected across x = 0; edges lying on x = 0 are not
+// outlined so the two halves read as one body.
+// part: 0 hull (fuselage), 1 hull (wings, tailplane), 2 livery accent (fin), 3 engines.
 
 static const Poly kJetPolys[] = {
-    {7, {0, 0.08f, 0.08f, 0.03f, -0.03f, -0.08f, -0.08f}, {-1, -0.85f, 0.75f, 1, 1, 0.75f, -0.85f}, false, 0},
-    {4, {0.08f, 0.92f, 0.92f, 0.08f}, {-0.12f, 0.28f, 0.42f, 0.18f}, true, 1},
-    {4, {0.05f, 0.36f, 0.36f, 0.05f}, {0.74f, 0.92f, 0.99f, 0.88f}, true, 2},
-    {4, {0.30f, 0.38f, 0.38f, 0.30f}, {0.02f, 0.06f, 0.20f, 0.16f}, true, 3},
+    // wings, swept and tapered, root hidden under the fuselage
+    {4, {0.04f, 0.95f, 0.95f, 0.04f}, {-0.16f, 0.22f, 0.31f, 0.20f}, true, 1},
+    // tailplane
+    {4, {0.04f, 0.38f, 0.38f, 0.04f}, {0.74f, 0.92f, 0.98f, 0.90f}, true, 1},
+    // engines, ahead of the wing leading edge
+    {4, {0.27f, 0.36f, 0.36f, 0.27f}, {-0.13f, -0.13f, 0.07f, 0.07f}, true, 3},
+    // fuselage with a rounded nose and tapered tail
+    {8, {0, 0.05f, 0.08f, 0.085f, 0.085f, 0.055f, 0.02f, 0}, {-1.0f, -0.96f, -0.85f, -0.6f, 0.5f, 0.85f, 1.0f, 1.0f}, true, 0},
+    // fin
+    {4, {0, 0.045f, 0.045f, 0}, {0.56f, 0.60f, 0.93f, 0.93f}, true, 2},
 };
 static const Poly kWidePolys[] = {
-    {7, {0, 0.1f, 0.1f, 0.04f, -0.04f, -0.1f, -0.1f}, {-1, -0.85f, 0.75f, 1, 1, 0.75f, -0.85f}, false, 0},
-    {4, {0.1f, 1.0f, 1.0f, 0.1f}, {-0.22f, 0.30f, 0.46f, 0.26f}, true, 1},
-    {4, {0.06f, 0.40f, 0.40f, 0.06f}, {0.74f, 0.92f, 0.99f, 0.88f}, true, 2},
-    {4, {0.30f, 0.38f, 0.38f, 0.30f}, {-0.02f, 0.02f, 0.18f, 0.14f}, true, 3},
-    {4, {0.55f, 0.63f, 0.63f, 0.55f}, {0.10f, 0.14f, 0.30f, 0.26f}, true, 3},
+    {4, {0.04f, 1.0f, 1.0f, 0.04f}, {-0.25f, 0.27f, 0.38f, 0.26f}, true, 1},
+    {4, {0.04f, 0.42f, 0.42f, 0.04f}, {0.72f, 0.92f, 0.99f, 0.90f}, true, 1},
+    {4, {0.30f, 0.40f, 0.40f, 0.30f}, {-0.12f, -0.12f, 0.10f, 0.10f}, true, 3},
+    {4, {0.60f, 0.70f, 0.70f, 0.60f}, {0.02f, 0.02f, 0.22f, 0.22f}, true, 3},
+    {8, {0, 0.06f, 0.10f, 0.105f, 0.105f, 0.065f, 0.025f, 0}, {-1.0f, -0.96f, -0.84f, -0.6f, 0.5f, 0.85f, 1.0f, 1.0f}, true, 0},
+    {4, {0, 0.05f, 0.05f, 0}, {0.55f, 0.60f, 0.93f, 0.93f}, true, 2},
 };
 static const Poly kPropPolys[] = {
-    {7, {0, 0.08f, 0.08f, 0.03f, -0.03f, -0.08f, -0.08f}, {-1, -0.85f, 0.75f, 1, 1, 0.75f, -0.85f}, false, 0},
-    {4, {0.08f, 0.95f, 0.95f, 0.08f}, {-0.30f, -0.30f, -0.08f, -0.08f}, true, 1},
-    {4, {0.05f, 0.40f, 0.40f, 0.05f}, {0.80f, 0.80f, 0.93f, 0.93f}, true, 2},
-    {4, {0.45f, 0.53f, 0.53f, 0.45f}, {-0.45f, -0.45f, -0.30f, -0.30f}, true, 3},
+    // straight wings
+    {4, {0.04f, 0.95f, 0.95f, 0.04f}, {-0.28f, -0.26f, -0.05f, -0.03f}, true, 1},
+    {4, {0.04f, 0.40f, 0.40f, 0.04f}, {0.78f, 0.78f, 0.92f, 0.92f}, true, 1},
+    // engine nacelles
+    {4, {0.30f, 0.38f, 0.38f, 0.30f}, {-0.50f, -0.50f, -0.04f, -0.04f}, true, 3},
+    {8, {0, 0.05f, 0.075f, 0.08f, 0.08f, 0.05f, 0.02f, 0}, {-1.0f, -0.95f, -0.85f, -0.6f, 0.5f, 0.85f, 1.0f, 1.0f}, true, 0},
+    {4, {0, 0.04f, 0.04f, 0}, {0.62f, 0.66f, 0.92f, 0.92f}, true, 2},
+};
+static const Poly kLightPolys[] = {
+    {4, {0.04f, 0.95f, 0.95f, 0.04f}, {-0.28f, -0.26f, -0.02f, 0.0f}, true, 1},
+    {4, {0.04f, 0.38f, 0.38f, 0.04f}, {0.78f, 0.78f, 0.93f, 0.93f}, true, 1},
+    {8, {0, 0.06f, 0.09f, 0.09f, 0.09f, 0.05f, 0.02f, 0}, {-0.9f, -0.85f, -0.7f, -0.4f, 0.4f, 0.8f, 1.0f, 1.0f}, true, 0},
+    {4, {0, 0.04f, 0.04f, 0}, {0.62f, 0.66f, 0.92f, 0.92f}, true, 2},
+};
+static const Poly kBizPolys[] = {
+    {4, {0.04f, 0.95f, 0.95f, 0.04f}, {-0.02f, 0.30f, 0.38f, 0.22f}, true, 1},
+    {4, {0.04f, 0.36f, 0.36f, 0.04f}, {0.78f, 0.90f, 0.96f, 0.92f}, true, 1},
+    // rear-mounted engines
+    {4, {0.095f, 0.17f, 0.17f, 0.095f}, {0.50f, 0.50f, 0.82f, 0.82f}, true, 3},
+    {8, {0, 0.045f, 0.07f, 0.075f, 0.075f, 0.05f, 0.02f, 0}, {-1.0f, -0.96f, -0.85f, -0.6f, 0.5f, 0.85f, 1.0f, 1.0f}, true, 0},
+    {4, {0, 0.04f, 0.04f, 0}, {0.55f, 0.60f, 0.93f, 0.93f}, true, 2},
 };
 static const Poly kHeliPolys[] = {
-    {6, {0, 0.2f, 0.2f, 0, -0.2f, -0.2f}, {-0.5f, -0.3f, 0.2f, 0.35f, 0.2f, -0.3f}, false, 0},
-    {4, {0.03f, 0.03f, -0.03f, -0.03f}, {0.3f, 1.0f, 1.0f, 0.3f}, false, 2},
-    {4, {0.03f, 0.2f, 0.2f, 0.03f}, {0.9f, 0.9f, 1.0f, 1.0f}, true, 3},
+    // tail boom and tail fin
+    {4, {0.03f, 0.03f, -0.03f, -0.03f}, {0.3f, 1.0f, 1.0f, 0.3f}, false, 1},
+    {4, {0.03f, 0.2f, 0.2f, 0.03f}, {0.88f, 0.88f, 0.98f, 0.98f}, true, 2},
+    // cabin
+    {6, {0, 0.14f, 0.2f, 0.2f, 0.12f, 0.0f}, {-0.55f, -0.45f, -0.2f, 0.15f, 0.38f, 0.4f}, true, 0},
 };
 
-static const Shape kJet = {kJetPolys, COUNT(kJetPolys), 0.0f, 0.85f};
+static const Shape kJet = {kJetPolys, COUNT(kJetPolys), 0.0f, 0.9f};
 static const Shape kWide = {kWidePolys, COUNT(kWidePolys), 0.0f, 1.0f};
 static const Shape kProp = {kPropPolys, COUNT(kPropPolys), 0.0f, 0.8f};
-static const Shape kLight = {kPropPolys, COUNT(kPropPolys), 0.0f, 0.6f};
-static const Shape kBizShape = {kJetPolys, COUNT(kJetPolys), 0.0f, 0.65f};
+static const Shape kLight = {kLightPolys, COUNT(kLightPolys), 0.0f, 0.65f};
+static const Shape kBizShape = {kBizPolys, COUNT(kBizPolys), 0.0f, 0.75f};
 static const Shape kHeliShape = {kHeliPolys, COUNT(kHeliPolys), 0.9f, 0.7f};
 
 const Shape& shapeFor(Category c) {
