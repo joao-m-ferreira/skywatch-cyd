@@ -23,17 +23,21 @@ type Flight struct {
 	Route    string  `json:"rt,omitempty"`
 }
 
+type upstreamAC struct {
+	Flight  string          `json:"flight"`
+	Type    string          `json:"t"`
+	Reg     string          `json:"r"`
+	Lat     *float64        `json:"lat"`
+	Lon     *float64        `json:"lon"`
+	AltBaro json.RawMessage `json:"alt_baro"`
+	GS      float64         `json:"gs"`
+	Track   float64         `json:"track"`
+}
+
+// upstream accepts both adsb.fi ("aircraft") and adsb.lol ("ac") list keys.
 type upstream struct {
-	AC []struct {
-		Flight  string          `json:"flight"`
-		Type    string          `json:"t"`
-		Reg     string          `json:"r"`
-		Lat     *float64        `json:"lat"`
-		Lon     *float64        `json:"lon"`
-		AltBaro json.RawMessage `json:"alt_baro"`
-		GS      float64         `json:"gs"`
-		Track   float64         `json:"track"`
-	} `json:"ac"`
+	Aircraft []upstreamAC `json:"aircraft"`
+	AC       []upstreamAC `json:"ac"`
 }
 
 const earthKm = 6371.0
@@ -60,7 +64,11 @@ func parseUpstream(body []byte, lat, lon, radiusKm float64, n int) ([]Flight, er
 		return nil, fmt.Errorf("decode upstream: %w", err)
 	}
 	var out []Flight
-	for _, a := range u.AC {
+	list := u.Aircraft
+	if list == nil {
+		list = u.AC
+	}
+	for _, a := range list {
 		if a.Lat == nil || a.Lon == nil {
 			continue
 		}

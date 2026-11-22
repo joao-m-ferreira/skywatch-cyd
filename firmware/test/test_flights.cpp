@@ -56,6 +56,17 @@ int main() {
   CHECK(jf::parseAdsb("{bad", 4, 0, 0, 10, f, 2) == -1);
   CHECK(jf::parseAdsb("{\"x\":1}", 7, 0, 0, 10, f, 2) == -1);
 
+  // Real adsb.fi format: list under "aircraft" (adsb.lol uses "ac").
+  const char* fi =
+      "{\"now\":1,\"resultCount\":2,\"aircraft\":["
+      "{\"hex\":\"a\",\"flight\":\"EJU9046 \",\"t\":\"A320\",\"lat\":38.65,\"lon\":-9.20,"
+      "\"alt_baro\":2375,\"gs\":169.2,\"track\":21.8,\"extra\":{\"x\":1}},"
+      "{\"flight\":\"TAP93MA \",\"t\":\"E190\",\"lat\":38.66,\"lon\":-9.46,\"alt_baro\":13475}]}";
+  n = jf::parseAdsb(fi, strlen(fi), 38.72, -9.14, 40, f, jf::kMaxFlights);
+  CHECK(n == 2);
+  CHECK(strcmp(f[0].callsign, "EJU9046") == 0);
+  CHECK(strcmp(f[1].callsign, "TAP93MA") == 0);
+
   char b[16];
   jf::formatAltitude(3500, b, sizeof b);
   CHECK(strcmp(b, "3500 ft") == 0);

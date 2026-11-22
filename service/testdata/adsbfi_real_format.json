@@ -1,0 +1,3 @@
+{"now":1,"resultCount":2,"aircraft":[
+{"hex":"a","flight":"EJU9046 ","t":"A320","r":"OE-IJA","lat":38.65,"lon":-9.20,"alt_baro":2375,"gs":169.2,"track":21.8},
+{"hex":"b","flight":"TAP93MA ","t":"E190","lat":38.66,"lon":-9.46,"alt_baro":13475,"gs":335.4,"track":226.9}]}

@@ -26,6 +26,8 @@ int parseFlights(const char* json, size_t len, Flight* out, size_t max);
 // Keys to keep when parsing an ADS-B (adsb.fi / adsb.lol v2) response, so a large
 // payload fits in RAM. Pass to DeserializationOption::Filter.
 void adsbFilter(JsonDocument& filter);
+// True when the document has an aircraft list (key "aircraft" or "ac").
+bool adsbValid(const JsonDocument& doc);
 // Turns a (filtered) ADS-B document into the nearest airborne flights, nearest first:
 // drops ground/no-position aircraft and anything beyond radius_km. Returns the count.
 int adsbToFlights(const JsonDocument& doc, double lat, double lon, double radius_km,

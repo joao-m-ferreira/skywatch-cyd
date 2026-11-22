@@ -19,6 +19,7 @@ jf::Flight flights[jf::kMaxFlights];
 int flightCount = 0;
 int selected = 0;
 bool demo = false;
+bool fetchFailed = false;
 uint32_t lastPoll = 0;
 
 const char kDemoJson[] =
@@ -56,7 +57,7 @@ bool fetchFlights() {
     JsonDocument filter, doc;
     jf::adsbFilter(filter);
     if (!deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter)) &&
-        !doc["ac"].isNull()) {
+        jf::adsbValid(doc)) {
       flightCount = jf::adsbToFlights(doc, HOME_LAT, HOME_LON, RADIUS_KM, flights,
                                       jf::kMaxFlights);
       ok = true;
@@ -76,11 +77,11 @@ void drawScreen() {
   tft.setTextColor(TFT_CYAN, TFT_BLACK);
   tft.setTextDatum(top_left);
   tft.setFont(&fonts::Font2);
-  tft.drawString(demo ? "DEMO DATA" : "Flights nearby", 6, 4);
+  tft.drawString(demo ? "DEMO DATA (tap here for live)" : "Flights nearby (tap here for demo)", 6, 4);
   if (flightCount == 0) {
     tft.setFont(&fonts::FreeSansBold12pt7b);
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.drawString("No aircraft in range", 20, 100);
+    tft.setTextColor(fetchFailed ? TFT_RED : TFT_WHITE, TFT_BLACK);
+    tft.drawString(fetchFailed ? "Fetch failed (WiFi/API)" : "No aircraft in range", 20, 100);
     tft.endWrite();
     return;
   }
@@ -137,14 +138,29 @@ void loop() {
   bool redraw = false;
   if (!demo && now - lastPoll >= kPollMs) {
     lastPoll = now;
-    if (!fetchFlights()) Serial.println("fetch failed; keeping last data");
+    fetchFailed = !fetchFlights();
+    if (fetchFailed) Serial.println("fetch failed; keeping last data");
+    else Serial.printf("fetched %d aircraft\n", flightCount);
     redraw = true;
   }
   int32_t x, y;
-  if (tft.getTouch(&x, &y) && flightCount > 0) {
-    selected = (selected + 1) % flightCount;
-    redraw = true;
-    delay(250);  // debounce
+  if (tft.getTouch(&x, &y)) {
+    if (y < 30) {  // header: toggle demo <-> live
+      demo = !demo;
+      selected = 0;
+      fetchFailed = false;
+      if (demo) {
+        loadDemo();
+      } else {
+        flightCount = 0;
+        lastPoll = now - kPollMs;  // fetch immediately
+      }
+      redraw = true;
+    } else if (flightCount > 0) {
+      selected = (selected + 1) % flightCount;
+      redraw = true;
+    }
+    delay(300);  // debounce
   }
   static uint32_t lastLdr = 0;
   if (now - lastLdr > 1000) {

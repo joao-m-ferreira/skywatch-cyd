@@ -37,16 +37,26 @@ int parseFlights(const char* json, size_t len, Flight* out, size_t max) {
 }
 
 void adsbFilter(JsonDocument& filter) {
-  JsonObject a = filter["ac"][0].to<JsonObject>();
-  a["flight"] = true;
-  a["t"] = true;
-  a["r"] = true;
-  a["lat"] = true;
-  a["lon"] = true;
-  a["alt_baro"] = true;
-  a["gs"] = true;
-  a["track"] = true;
+  // adsb.fi uses "aircraft", adsb.lol uses "ac": accept both.
+  for (const char* key : {"aircraft", "ac"}) {
+    JsonObject a = filter[key][0].to<JsonObject>();
+    a["flight"] = true;
+    a["t"] = true;
+    a["r"] = true;
+    a["lat"] = true;
+    a["lon"] = true;
+    a["alt_baro"] = true;
+    a["gs"] = true;
+    a["track"] = true;
+  }
 }
+
+static JsonArrayConst adsbList(const JsonDocument& doc) {
+  JsonArrayConst arr = doc["aircraft"].as<JsonArrayConst>();
+  return arr.isNull() ? doc["ac"].as<JsonArrayConst>() : arr;
+}
+
+bool adsbValid(const JsonDocument& doc) { return !adsbList(doc).isNull(); }
 
 static double rad(double d) { return d * M_PI / 180.0; }
 
@@ -64,7 +74,7 @@ static void distBearing(double lat1, double lon1, double lat2, double lon2, doub
 
 int adsbToFlights(const JsonDocument& doc, double lat, double lon, double radius_km,
                   Flight* out, size_t max) {
-  JsonArrayConst arr = doc["ac"].as<JsonArrayConst>();
+  JsonArrayConst arr = adsbList(doc);
   if (arr.isNull() || max == 0) return 0;
   size_t n = 0;
   for (JsonObjectConst o : arr) {
@@ -106,7 +116,7 @@ int parseAdsb(const char* json, size_t len, double lat, double lon, double radiu
   if (json == nullptr ||
       deserializeJson(doc, json, len, DeserializationOption::Filter(filter)))
     return -1;
-  if (doc["ac"].isNull()) return -1;
+  if (!adsbValid(doc)) return -1;
   return adsbToFlights(doc, lat, lon, radius_km, out, max);
 }
 

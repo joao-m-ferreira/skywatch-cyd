@@ -86,3 +86,14 @@ func TestHandlerRejectsBadParamsAndToken(t *testing.T) {
 		t.Fatalf("want 400 got %d", r.StatusCode)
 	}
 }
+
+func TestParseUpstreamAdsbFiAircraftKey(t *testing.T) {
+	b, err := os.ReadFile("testdata/adsbfi_real_format.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fl, err := parseUpstream(b, 38.72, -9.14, 40, 10)
+	if err != nil || len(fl) != 2 || fl[0].Callsign != "EJU9046" {
+		t.Fatalf("adsb.fi format not parsed: %v %+v", err, fl)
+	}
+}
