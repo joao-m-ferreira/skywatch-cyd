@@ -19,10 +19,6 @@ struct Flight {
   int bearing;
 };
 
-// Parses {"f":[{cs,ty,alt,spd,trk,km,brg},...]}. Returns the number of flights
-// stored (0..max) or -1 when the payload is not valid.
-int parseFlights(const char* json, size_t len, Flight* out, size_t max);
-
 // Keys to keep when parsing an ADS-B (adsb.fi / adsb.lol v2) response, so a large
 // payload fits in RAM. Pass to DeserializationOption::Filter.
 void adsbFilter(JsonDocument& filter);

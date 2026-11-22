@@ -3,7 +3,9 @@
 #include <string.h>
 
 #include "../jf_flight_display/board.h"
+#include "../jf_flight_display/airline.h"
 #include "../jf_flight_display/flights.h"
+#include "../jf_flight_display/silhouette.h"
 
 static int failures = 0;
 #define CHECK(c)                                          \
@@ -15,23 +17,8 @@ static int failures = 0;
   } while (0)
 
 int main() {
-  const char* ok =
-      "{\"f\":[{\"cs\":\"TAP456\",\"ty\":\"A320\",\"alt\":3500,\"spd\":180,\"trk\":200,"
-      "\"km\":4.2,\"brg\":225},{\"cs\":\"RYR123\",\"alt\":12000,\"km\":150.4,\"brg\":10}]}";
   jf::Flight f[jf::kMaxFlights];
-  int n = jf::parseFlights(ok, strlen(ok), f, jf::kMaxFlights);
-  CHECK(n == 2);
-  CHECK(strcmp(f[0].callsign, "TAP456") == 0);
-  CHECK(strcmp(f[0].type, "A320") == 0);
-  CHECK(f[0].alt_ft == 3500 && f[0].bearing == 225);
-  CHECK(f[1].type[0] == '\0');
-
-  CHECK(jf::parseFlights("{bad", 4, f, jf::kMaxFlights) == -1);
-  const char* nof = "{\"x\":1}";
-  CHECK(jf::parseFlights(nof, strlen(nof), f, jf::kMaxFlights) == -1);
-  const char* nocs = "{\"f\":[{\"alt\":1}]}";
-  CHECK(jf::parseFlights(nocs, strlen(nocs), f, jf::kMaxFlights) == 0);
-  CHECK(jf::parseFlights(ok, strlen(ok), f, 1) == 1);  // honours max
+  int n;
 
   // Direct ADS-B parsing (the standalone path), same fixture as the Go service.
   const char* adsb =
@@ -88,6 +75,54 @@ int main() {
 
   CHECK(board::kScreenW == 320 && board::kScreenH == 240);
   CHECK(board::kTftCs == 15 && board::kTouchCs == 33);
+
+  using jf::Category;
+  CHECK(jf::categorize("A320") == Category::Jet);
+  CHECK(jf::categorize("B738") == Category::Jet);
+  CHECK(jf::categorize("E190") == Category::Jet);
+  CHECK(jf::categorize("A388") == Category::Wide);
+  CHECK(jf::categorize("B77W") == Category::Wide);
+  CHECK(jf::categorize("A359") == Category::Wide);
+  CHECK(jf::categorize("C17") == Category::Wide);
+  CHECK(jf::categorize("AT76") == Category::Prop);
+  CHECK(jf::categorize("DH8D") == Category::Prop);
+  CHECK(jf::categorize("C172") == Category::Light);
+  CHECK(jf::categorize("PA28") == Category::Light);
+  CHECK(jf::categorize("GLF5") == Category::Biz);
+  CHECK(jf::categorize("C56X") == Category::Biz);
+  CHECK(jf::categorize("EC35") == Category::Heli);
+  CHECK(jf::categorize("R44") == Category::Heli);
+  CHECK(jf::categorize("") == Category::Jet);
+  CHECK(jf::categorize(nullptr) == Category::Jet);
+
+  int sx, sy;  // nose (0,-1): north at heading 0, east at 90, south at 180
+  jf::transformPoint(0, -1, 0, 10, 100, 100, &sx, &sy);
+  CHECK(sx == 100 && sy == 90);
+  jf::transformPoint(0, -1, 90, 10, 100, 100, &sx, &sy);
+  CHECK(sx == 110 && sy == 100);
+  jf::transformPoint(0, -1, 180, 10, 100, 100, &sx, &sy);
+  CHECK(sx == 100 && sy == 110);
+  for (Category c : {Category::Jet, Category::Wide, Category::Prop, Category::Light,
+                     Category::Biz, Category::Heli}) {
+    const jf::Shape& sh = jf::shapeFor(c);
+    CHECK(sh.count > 0 && sh.scale > 0.0f);
+    for (size_t p = 0; p < sh.count; ++p) {
+      CHECK(sh.polys[p].n >= 3 && sh.polys[p].n <= jf::kMaxPolyPoints);
+      for (size_t i = 0; i < sh.polys[p].n; ++i) {
+        CHECK(sh.polys[p].x[i] >= -1.0f && sh.polys[p].x[i] <= 1.0f);
+        CHECK(sh.polys[p].y[i] >= -1.0f && sh.polys[p].y[i] <= 1.0f);
+      }
+    }
+  }
+
+  const jf::Airline* a = jf::airlineFor("RYR8XY");
+  CHECK(a != nullptr && strcmp(a->name, "Ryanair") == 0 && a->b1 == 144);
+  CHECK(jf::airlineFor("TAP1234") != nullptr);
+  CHECK(jf::airlineFor("CS-DXX") == nullptr);   // registration, not a callsign
+  CHECK(jf::airlineFor("N512GX") == nullptr);   // 4th char is a letter
+  CHECK(jf::airlineFor("XYZ123") == nullptr);   // unknown operator
+  CHECK(jf::airlineFor("AB") == nullptr && jf::airlineFor(nullptr) == nullptr);
+  CHECK(strlen(jf::airlineFor("EZY12")->name) <= 14);
 
   if (failures == 0) printf("all firmware host tests passed\n");
   return failures ? 1 : 0;

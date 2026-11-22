@@ -6,5 +6,5 @@ cd "$(dirname "$0")/.."
 (cd service && go test ./...)
 mkdir -p build
 g++ -std=c++17 -Wall -Wextra -Werror -I"$AJ_DIR" \
-  firmware/test/test_flights.cpp firmware/jf_flight_display/flights.cpp -o build/test_flights
+  firmware/test/test_flights.cpp firmware/jf_flight_display/flights.cpp firmware/jf_flight_display/silhouette.cpp firmware/jf_flight_display/airline.cpp -o build/test_flights
 build/test_flights

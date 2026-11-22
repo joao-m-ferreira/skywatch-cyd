@@ -1,6 +1,5 @@
 // Nearby-flights display for the ESP32-2432S028 (CYD).
-// Standalone: fetches ADS-B data from adsb.fi directly. Without WiFi it falls back
-// to built-in demo data.
+// Standalone: fetches ADS-B data from adsb.fi directly over WiFi.
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <WiFi.h>
@@ -8,6 +7,7 @@
 #include "board.h"
 #include "display.h"
 #include "flights.h"
+#include "plate.h"
 #include "secrets.h"  // copy secrets.h.example -> secrets.h (git-ignored)
 
 namespace {
@@ -18,22 +18,20 @@ LGFX tft;
 jf::Flight flights[jf::kMaxFlights];
 int flightCount = 0;
 int selected = 0;
-bool demo = false;
 bool fetchFailed = false;
+char lastError[48] = "";
 uint32_t lastPoll = 0;
-
-const char kDemoJson[] =
-    "{\"f\":[{\"cs\":\"TAP1234\",\"ty\":\"A320\",\"alt\":3500,\"spd\":180,\"trk\":200,"
-    "\"km\":4.2,\"brg\":225},{\"cs\":\"RYR8XY\",\"ty\":\"B738\",\"alt\":12000,\"spd\":310,"
-    "\"trk\":88,\"km\":18.7,\"brg\":10},{\"cs\":\"CS-DXX\",\"ty\":\"C172\",\"alt\":2000,"
-    "\"spd\":90,\"trk\":10,\"km\":31.0,\"brg\":340}]}";
 
 bool connectWifi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   uint32_t t0 = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - t0 < kWifiTimeoutMs) delay(250);
-  return WiFi.status() == WL_CONNECTED;
+  if (WiFi.status() == WL_CONNECTED) return true;
+  snprintf(lastError, sizeof lastError, "WiFi '%s' failed (status %d)", WIFI_SSID,
+           static_cast<int>(WiFi.status()));
+  Serial.println(lastError);
+  return false;
 }
 
 // Standalone: query adsb.fi open data directly (HTTPS) and filter while streaming so the
@@ -51,67 +49,54 @@ bool fetchFlights() {
   HTTPClient http;
   http.useHTTP10(true);  // no chunked encoding: the stream is plain JSON
   http.setTimeout(10000);
-  if (!http.begin(client, url)) return false;
+  if (!http.begin(client, url)) {
+    snprintf(lastError, sizeof lastError, "HTTP begin failed");
+    return false;
+  }
   bool ok = false;
-  if (http.GET() == HTTP_CODE_OK) {
-    JsonDocument filter, doc;
-    jf::adsbFilter(filter);
-    if (!deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter)) &&
-        jf::adsbValid(doc)) {
-      flightCount = jf::adsbToFlights(doc, HOME_LAT, HOME_LON, RADIUS_KM, flights,
-                                      jf::kMaxFlights);
-      ok = true;
+  int code = http.GET();
+  if (code != HTTP_CODE_OK) {
+    snprintf(lastError, sizeof lastError, "HTTP %d %s", code,
+             code < 0 ? HTTPClient::errorToString(code).c_str() : "");
+    Serial.println(lastError);
+  } else {
+    // Read the whole body first: parsing straight from the TLS stream can hit a
+    // momentary "no data yet" and be mistaken for the end of the document.
+    String body = http.getString();
+    constexpr size_t kMaxBody = 120000;
+    if (body.length() == 0 || body.length() > kMaxBody) {
+      snprintf(lastError, sizeof lastError, "Body size %u", static_cast<unsigned>(body.length()));
+      Serial.println(lastError);
+    } else {
+      JsonDocument filter, doc;
+      jf::adsbFilter(filter);
+      DeserializationError err =
+          deserializeJson(doc, body, DeserializationOption::Filter(filter));
+      if (!err && jf::adsbValid(doc)) {
+        flightCount = jf::adsbToFlights(doc, HOME_LAT, HOME_LON, RADIUS_KM, flights,
+                                        jf::kMaxFlights);
+        ok = true;
+        lastError[0] = '\0';
+      } else {
+        snprintf(lastError, sizeof lastError, "JSON: %s (%u B)",
+                 err ? err.c_str() : "no aircraft list", static_cast<unsigned>(body.length()));
+        Serial.println(lastError);
+      }
     }
   }
   http.end();
   return ok;
 }
 
-void loadDemo() {
-  flightCount = jf::parseFlights(kDemoJson, sizeof kDemoJson - 1, flights, jf::kMaxFlights);
-}
-
 void drawScreen() {
-  tft.startWrite();
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_CYAN, TFT_BLACK);
-  tft.setTextDatum(top_left);
-  tft.setFont(&fonts::Font2);
-  tft.drawString(demo ? "DEMO DATA (tap here for live)" : "Flights nearby (tap here for demo)", 6, 4);
+  const char* note = "LIVE";
   if (flightCount == 0) {
-    tft.setFont(&fonts::FreeSansBold12pt7b);
-    tft.setTextColor(fetchFailed ? TFT_RED : TFT_WHITE, TFT_BLACK);
-    tft.drawString(fetchFailed ? "Fetch failed (WiFi/API)" : "No aircraft in range", 20, 100);
-    tft.endWrite();
+    drawPlateMessage(tft, fetchFailed ? "Fetch failed" : "No aircraft in range",
+                     fetchFailed ? lastError : "", note, fetchFailed);
     return;
   }
   if (selected >= flightCount) selected = 0;
-  const jf::Flight& f = flights[selected];
-  char buf[24];
-  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-  tft.setFont(&fonts::FreeSansBold24pt7b);
-  tft.drawString(f.callsign, 6, 26);
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setFont(&fonts::FreeSans12pt7b);
-  tft.drawString(f.type[0] ? f.type : "type n/a", 6, 78);
-  jf::formatAltitude(f.alt_ft, buf, sizeof buf);
-  tft.drawString(buf, 6, 108);
-  snprintf(buf, sizeof buf, "%d kt  hdg %d", f.speed_kt, f.track);
-  tft.drawString(buf, 6, 138);
-  char d[16];
-  jf::formatDistance(f.dist_km, d, sizeof d);
-  snprintf(buf, sizeof buf, "%s %s", d, jf::compass(f.bearing));
-  tft.setTextColor(TFT_GREEN, TFT_BLACK);
-  tft.drawString(buf, 6, 168);
-  // Next-planes list along the bottom.
-  tft.setFont(&fonts::Font2);
-  for (int i = 0; i < flightCount && i < 4; ++i) {
-    tft.setTextColor(i == selected ? TFT_YELLOW : TFT_DARKGREY, TFT_BLACK);
-    snprintf(buf, sizeof buf, "%s %.0fkm", flights[i].callsign,
-             static_cast<double>(flights[i].dist_km));
-    tft.drawString(buf, 6 + (i % 2) * 160, 205 + (i / 2) * 16);
-  }
-  tft.endWrite();
+  drawPlate(tft, flights[selected], selected, flightCount, note);
 }
 
 void updateBacklight() {
@@ -123,20 +108,15 @@ void setup() {
   Serial.begin(115200);
   tft.init();
   tft.setRotation(1);  // 320x240 landscape
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_WHITE);
-  tft.drawString("Connecting...", 10, 10, &fonts::Font2);
-  if (!connectWifi()) {
-    demo = true;
-    loadDemo();
-  }
+  drawPlateMessage(tft, "Connecting...", WIFI_SSID, "LIVE", false);
+  connectWifi();  // a failure is retried by fetchFlights() in loop()
   lastPoll = millis() - kPollMs;
 }
 
 void loop() {
   uint32_t now = millis();
   bool redraw = false;
-  if (!demo && now - lastPoll >= kPollMs) {
+  if (now - lastPoll >= kPollMs) {
     lastPoll = now;
     fetchFailed = !fetchFlights();
     if (fetchFailed) Serial.println("fetch failed; keeping last data");
@@ -145,18 +125,7 @@ void loop() {
   }
   int32_t x, y;
   if (tft.getTouch(&x, &y)) {
-    if (y < 30) {  // header: toggle demo <-> live
-      demo = !demo;
-      selected = 0;
-      fetchFailed = false;
-      if (demo) {
-        loadDemo();
-      } else {
-        flightCount = 0;
-        lastPoll = now - kPollMs;  // fetch immediately
-      }
-      redraw = true;
-    } else if (flightCount > 0) {
+    if (flightCount > 0) {
       selected = (selected + 1) % flightCount;
       redraw = true;
     }

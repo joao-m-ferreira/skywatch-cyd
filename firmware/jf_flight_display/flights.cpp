@@ -14,28 +14,6 @@ static void copyStr(char* dst, size_t n, const char* src) {
   dst[n - 1] = '\0';
 }
 
-int parseFlights(const char* json, size_t len, Flight* out, size_t max) {
-  JsonDocument doc;
-  if (json == nullptr || deserializeJson(doc, json, len)) return -1;
-  JsonArrayConst arr = doc["f"].as<JsonArrayConst>();
-  if (arr.isNull()) return -1;
-  size_t n = 0;
-  for (JsonObjectConst o : arr) {
-    if (n >= max) break;
-    if (!o["cs"].is<const char*>()) continue;  // validate at the boundary
-    Flight& f = out[n];
-    copyStr(f.callsign, sizeof f.callsign, o["cs"]);
-    copyStr(f.type, sizeof f.type, o["ty"] | "");
-    f.alt_ft = o["alt"] | 0;
-    f.speed_kt = o["spd"] | 0;
-    f.track = o["trk"] | 0;
-    f.dist_km = o["km"] | 0.0f;
-    f.bearing = o["brg"] | 0;
-    ++n;
-  }
-  return static_cast<int>(n);
-}
-
 void adsbFilter(JsonDocument& filter) {
   // adsb.fi uses "aircraft", adsb.lol uses "ac": accept both.
   for (const char* key : {"aircraft", "ac"}) {
