@@ -1,13 +1,98 @@
-# jf-flight-display
+# skywatch-cyd
 
-Nearby flights on an ESP32-2432S028 ("Cheap Yellow Display"). Ideas from [suvl/ledmatrix](https://github.com/suvl/ledmatrix) and [dmellok/tesserae-widget-overhead](https://github.com/dmellok/tesserae-widget-overhead); no code copied from either.
+**Nearby flights on a €15 touchscreen: standalone, no server.** An ESP32-2432S028 ("Cheap Yellow
+Display") fetches the aircraft around you from open ADS-B data and shows them one at a time: airline,
+type, route, altitude, speed, distance, a compass, and a shaded 3D model in the airline's livery
+(or a photo of that exact plane). The board's RGB LED glows in the airline's colour.
 
-The board is standalone: it fetches flights from adsb.fi over WiFi, no server needed. (`service/` is an optional Go proxy, unused by the firmware.)
+![3D aircraft models rendered by the firmware's own code (host-side preview)](docs/images/models.png)
 
-1. `scripts/setup.sh`, then edit `firmware/jf_flight_display/secrets.h` (WiFi, location, radius).
-2. Flash manually (board on `/dev/cu.wchusbserial*`):
-   `arduino-cli compile --fqbn esp32:esp32:esp32 firmware/jf_flight_display && arduino-cli upload -p <port> --fqbn esp32:esp32:esp32 firmware/jf_flight_display`
-   A full-flash backup of the original firmware is in `../jf-espxx-misc/esp32-2432-generic/firmware-backup`.
+<sub>Rendered on the host from the same 3D code that runs on the board, so the shapes and liveries are
+exact; the real screen is 320×240 and looks smaller and blockier.</sub>
 
-Develop: `scripts/lint.sh`, `scripts/test.sh`, `scripts/build.sh`. See `CONTRIBUTING.md`.
-Data: adsb.fi open data (personal, non-commercial use), https://adsb.fi.
+## Features
+- **Carousel** of the nearest aircraft (default 40 km), touch to skip ahead. 20 s data refresh.
+- **Per-plane details:** callsign, airline, type, altitude / FL, speed and track, distance and
+  bearing, **route** (origin > destination), compass with the direction of travel.
+- **3D models** built on the board from real dimensions of ~110 types (A220–A380, 737–787, E-Jets, CRJ,
+  ATR, Dash 8, business jets, light aircraft, helicopters), with winglets, engines, windows, doors,
+  landing gear when low and slow, and the 747 hump / A380 double deck.
+- **Liveries** for ~140 airlines: fuselage scheme, tail designs (disc, stripes, diagonal, checker,
+  cross…), tinted fuselages, engine colours.
+- **Photos** of the actual aircraft from planespotters.net by registration (photographer credited),
+  with the 3D model as fallback.
+- **RGB LED** in the airline's colour; airlines with two real colours (Ryanair, TAP…) hold and fade
+  between them.
+- **Night mode:** screen and LED off on a schedule, touch to wake for 30 s.
+- **Location from your IP** (city level) or a fixed one.
+- **Robust:** WiFi watchdog, hardware watchdog, restarts if stuck, out of memory, or once a day.
+
+## Hardware
+One **ESP32-2432S028R** (2.8" ILI9341, resistive touch, RGB LED, light sensor) and a micro-USB
+cable, roughly €15–25. Capacitive "IPS" variants use different touch pins and are not supported.
+
+## Install
+Download the latest files from [Releases](../../releases) and flash with `esptool`
+(`pip install esptool`):
+
+```sh
+# first install (one file; also erases saved settings)
+esptool.py --chip esp32 --port <port> --baud 460800 write_flash 0x0 skywatch-cyd-<version>-merged.bin
+# update an installed board (keeps your settings)
+esptool.py --chip esp32 --port <port> --baud 460800 write_flash 0x10000 skywatch-cyd-<version>-firmware.bin
+```
+
+Then open a serial terminal at **115200 baud** (`screen /dev/cu.wchusbserial* 115200`, Arduino
+serial monitor, …) and type `help`.
+
+## Settings (USB serial, 115200 baud)
+Settings are saved in the board's flash. The build-time defaults come from `secrets.h`.
+
+| Command | What it does |
+|---|---|
+| `show` / `status` | current settings (password hidden) / uptime, memory, WiFi, clock |
+| `set ssid <name>` / `set pass <password>` | WiFi (`set pass -` for an open network) |
+| `set location auto` | locate from your public IP via geojs.io (default) |
+| `set location static <lat> <lon>` | fixed position (also `set lat` / `set lon`) |
+| `set radius <km>` | search radius, 1–250 |
+| `set contact <email>` | contact sent to planespotters.net (required by their API) |
+| `set night <from> <to>` / `set night off` | screen off between these hours, e.g. `set night 23 7` |
+| `set tz <posix tz>` | clock timezone (found from your location when auto) |
+| `night test` | try night mode for 20 s (not saved) |
+| `reboot` / `factory` | restart / forget saved settings |
+
+## Build from source
+Needs `arduino-cli`, Go (optional proxy only), and the ESP32 core.
+
+```sh
+scripts/setup.sh        # core + libraries, creates firmware/jf_flight_display/secrets.h
+# edit secrets.h (WiFi, contact) or configure over serial after flashing
+scripts/lint.sh && scripts/test.sh && scripts/build.sh
+arduino-cli upload -p <port> --fqbn esp32:esp32:esp32:PartitionScheme=huge_app --input-dir build/firmware
+```
+`scripts/test.sh` runs host-side tests for the parsing, aircraft table, 3D meshes, airline table and
+serial commands. See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Releases
+Versions follow [Semantic Versioning](https://semver.org/) and live as git tags (`v0.1.0`); the
+firmware reports its version at boot and in `status`.
+
+1. Add a section to [CHANGELOG.md](CHANGELOG.md) and write `docs/releases/<version>.md`.
+2. Merge to `main` and wait for CI to pass.
+3. Run `scripts/tag-release.sh <version>`: it checks everything, then pushes the tag.
+4. The Release workflow builds the binaries from a clean checkout (no secrets), verifies them, and
+   publishes `skywatch-cyd-<version>-merged.bin`, `-firmware.bin` and `SHA256SUMS`.
+
+## Data sources and credits
+- Aircraft positions: [adsb.fi](https://adsb.fi) open data (personal, non-commercial use).
+- Routes: [adsbdb](https://www.adsbdb.com) (community data: can be wrong or missing).
+- Photos: [planespotters.net](https://www.planespotters.net), credited on screen to each photographer.
+- Location: [geojs.io](https://www.geojs.io) (sends your public IP; use a static location to avoid it).
+- Inspired by [suvl/ledmatrix](https://github.com/suvl/ledmatrix) and
+  [dmellok/tesserae-widget-overhead](https://github.com/dmellok/tesserae-widget-overhead); no code was
+  copied from either.
+
+## Limits
+No airline logos or lettering (trademarks, and the screen is too small), no AI-painted images, no
+weather. Liveries and colours are approximations. The optional Go service in `service/` is a simple
+proxy the firmware does not use. No licence has been chosen yet.

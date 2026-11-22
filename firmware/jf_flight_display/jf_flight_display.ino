@@ -16,6 +16,7 @@
 #include "photos.h"
 #include "plate.h"
 #include "routes.h"
+#include "version.h"
 #include "secrets.h"  // build-time defaults; copy secrets.h.example -> secrets.h (git-ignored)
 
 namespace {
@@ -335,10 +336,10 @@ void printStatus() {
   struct tm t;
   char when[32] = "not synced";
   if (timeValid() && getLocalTime(&t, 0)) strftime(when, sizeof when, "%Y-%m-%d %H:%M:%S", &t);
-  Serial.printf("uptime   %lu s\nheap     %u free, %u lowest\nwifi     %s (%s) rssi %d\n"
+  Serial.printf("version  %s\nuptime   %lu s\nheap     %u free, %u lowest\nwifi     %s (%s) rssi %d\n"
                 "clock    %s\nnight    %s%s\nscreen   %s, backlight %d/255, light sensor %d/4095\n"
                 "aircraft %d, last fetch %s\n",
-                static_cast<unsigned long>(millis() / 1000), static_cast<unsigned>(ESP.getFreeHeap()),
+                SKYWATCH_VERSION, static_cast<unsigned long>(millis() / 1000), static_cast<unsigned>(ESP.getFreeHeap()),
                 static_cast<unsigned>(ESP.getMinFreeHeap()),
                 WiFi.status() == WL_CONNECTED ? "connected" : "DOWN",
                 WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString().c_str() : "-",
@@ -462,7 +463,7 @@ void setup() {
   if (esp_task_wdt_reconfigure(&wdt) != ESP_OK) esp_task_wdt_init(&wdt);
   esp_task_wdt_add(nullptr);
 
-  Serial.println("\nskywatch-cyd: type 'help' for settings");
+  Serial.printf("\nskywatch-cyd %s: type 'help' for settings\n", SKYWATCH_VERSION);
   if (jf::configWifiReady(cfg)) {
     drawPlateMessage(tft, "Connecting...", cfg.ssid, "Flights nearby", "", false);
     if (connectWifi()) {

@@ -60,6 +60,7 @@ jobs:
             echo "::error::no successful ci.yml run for $GITHUB_SHA — nothing releases red (merge via a green PR, then tag that commit)"
             exit 1
           fi
+      - uses: arduino/setup-arduino-cli@b3cda96fddef6af6c56b4c5efb5c47e2357935db # v2.1.0
       - name: Toolchain setup (optional project hook)
         run: if [ -x scripts/release-setup.sh ]; then scripts/release-setup.sh; fi
       - name: Package
