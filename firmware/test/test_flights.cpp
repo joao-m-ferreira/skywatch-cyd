@@ -102,31 +102,43 @@ int main() {
   CHECK(sx == 110 && sy == 100);
   jf::transformPoint(0, -1, 180, 10, 100, 100, &sx, &sy);
   CHECK(sx == 100 && sy == 110);
-  for (Category c : {Category::Jet, Category::Wide, Category::Prop, Category::Light,
-                     Category::Biz, Category::Heli}) {
-    const jf::Shape& sh = jf::shapeFor(c);
-    CHECK(sh.count > 0 && sh.scale > 0.0f);
+  // Per-type silhouettes: every spec resolves to itself (no shadowing by an earlier,
+  // shorter prefix) and generates convex, in-bounds polygons.
+  for (size_t i = 0; i < jf::specCount(); ++i) {
+    CHECK(&jf::specFor(jf::specAt(i).prefix) == &jf::specAt(i));
+  }
+  const char* types[] = {"A319", "A320", "A321", "A388", "B744", "B77W", "B789", "B738", "E190",
+                         "CRJ9", "AT76", "DH8D", "C172", "GLF5", "EC35", "ZZZZ", "", "A35K", "A343"};
+  for (const char* ty : types) {
+    const jf::Shape& sh = jf::shapeForType(ty);
+    CHECK(sh.count > 0 && sh.count <= jf::kMaxPolys && sh.scale > 0.0f && sh.half_extent > 0.0f);
     for (size_t p = 0; p < sh.count; ++p) {
-      CHECK(sh.polys[p].n >= 3 && sh.polys[p].n <= jf::kMaxPolyPoints);
+      const size_t n = sh.polys[p].n;
+      CHECK(n >= 3 && n <= jf::kMaxPolyPoints);
       CHECK(sh.polys[p].part >= 0 && sh.polys[p].part <= 3);
-      {  // convex (the renderer fills polygons as a triangle fan)
-        int pos = 0, neg = 0;
-        const size_t n = sh.polys[p].n;
-        for (size_t i = 0; i < n; ++i) {
-          const size_t j = (i + 1) % n, k = (i + 2) % n;
-          float cr = (sh.polys[p].x[j] - sh.polys[p].x[i]) * (sh.polys[p].y[k] - sh.polys[p].y[j]) -
-                     (sh.polys[p].y[j] - sh.polys[p].y[i]) * (sh.polys[p].x[k] - sh.polys[p].x[j]);
-          if (cr > 1e-6f) ++pos;
-          if (cr < -1e-6f) ++neg;
-        }
-        CHECK(pos == 0 || neg == 0);
+      int pos = 0, neg = 0;  // convex: the renderer fills polygons as a triangle fan
+      for (size_t i = 0; i < n; ++i) {
+        CHECK(sh.polys[p].x[i] >= -sh.half_extent - 0.01f && sh.polys[p].x[i] <= sh.half_extent + 0.01f);
+        CHECK(sh.polys[p].y[i] >= -sh.half_extent - 0.01f && sh.polys[p].y[i] <= sh.half_extent + 0.01f);
+        const size_t j = (i + 1) % n, k = (i + 2) % n;
+        float cr = (sh.polys[p].x[j] - sh.polys[p].x[i]) * (sh.polys[p].y[k] - sh.polys[p].y[j]) -
+                   (sh.polys[p].y[j] - sh.polys[p].y[i]) * (sh.polys[p].x[k] - sh.polys[p].x[j]);
+        if (cr > 1e-5f) ++pos;
+        if (cr < -1e-5f) ++neg;
       }
-      for (size_t i = 0; i < sh.polys[p].n; ++i) {
-        CHECK(sh.polys[p].x[i] >= -1.0f && sh.polys[p].x[i] <= 1.0f);
-        CHECK(sh.polys[p].y[i] >= -1.0f && sh.polys[p].y[i] <= 1.0f);
-      }
+      if (!(pos == 0 || neg == 0)) printf("non-convex poly %zu of %s\n", p, ty);
+      CHECK(pos == 0 || neg == 0);
     }
   }
+  // Types look different from each other.
+  CHECK(jf::specFor("A319").length < jf::specFor("A320").length);
+  CHECK(jf::specFor("A320").length < jf::specFor("A321").length);
+  CHECK(jf::specFor("A388").engines == 4 && jf::specFor("B744").engines == 4);
+  CHECK(jf::specFor("A320").engines == 2);
+  CHECK(jf::specFor("CRJ9").mount == jf::Mount::Rear);
+  CHECK(jf::specFor("AT76").mount == jf::Mount::Prop);
+  CHECK(jf::specFor("EC35").mount == jf::Mount::Heli);
+  CHECK(jf::shapeForType("A388").scale < jf::shapeForType("C172").scale);  // px per metre
 
   const jf::Airline* a = jf::airlineFor("RYR8XY");
   CHECK(a != nullptr && strcmp(a->name, "Ryanair") == 0 && a->b1 == 144);
@@ -135,7 +147,14 @@ int main() {
   CHECK(jf::airlineFor("N512GX") == nullptr);   // 4th char is a letter
   CHECK(jf::airlineFor("XYZ123") == nullptr);   // unknown operator
   CHECK(jf::airlineFor("AB") == nullptr && jf::airlineFor(nullptr) == nullptr);
-  CHECK(strlen(jf::airlineFor("EZY12")->name) <= 14);
+  for (size_t i = 0; i < jf::airlineCount(); ++i) {  // names fit the column, codes unique
+    CHECK(strlen(jf::airlineAt(i).name) <= 15);
+    CHECK(strlen(jf::airlineAt(i).icao) == 3);
+    for (size_t j = i + 1; j < jf::airlineCount(); ++j)
+      CHECK(strcmp(jf::airlineAt(i).icao, jf::airlineAt(j).icao) != 0);
+  }
+  CHECK(jf::airlineFor("AEE7PT") != nullptr);
+  CHECK(jf::looksLikeAirlineCallsign("QQQ123") && !jf::looksLikeAirlineCallsign("CS-DXX"));
 
   if (failures == 0) printf("all firmware host tests passed\n");
   return failures ? 1 : 0;

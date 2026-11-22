@@ -15,23 +15,23 @@ Colors colors(lgfx::LovyanGFX& g) {
           static_cast<uint16_t>(g.color565(176, 160, 130)), static_cast<uint16_t>(g.color565(150, 40, 30))};
 }
 
-void frame(lgfx::LovyanGFX& g, const Colors& c, const char* note) {
+void frame(lgfx::LovyanGFX& g, const Colors& c, const char* left, const char* right) {
   g.fillScreen(c.paper);
   g.drawRect(3, 3, board::kScreenW - 6, board::kScreenH - 6, c.ink);
   g.drawRect(6, 6, board::kScreenW - 12, board::kScreenH - 12, c.faint);
   g.setFont(&lgfx::fonts::Font2);
-  g.setTextColor(c.accent);
+  g.setTextColor(c.ink);
   g.setTextDatum(lgfx::top_left);
-  g.drawString("OVERHEAD", 14, 11);
+  g.drawString(left, 14, 11);
   g.setTextDatum(lgfx::top_right);
   g.setTextColor(c.faint);
-  g.drawString(note, board::kScreenW - 14, 11);
+  g.drawString(right, board::kScreenW - 14, 11);
   g.drawFastHLine(10, 30, board::kScreenW - 20, c.ink);
 }
 
 void drawShape(lgfx::LovyanGFX& g, const jf::Shape& sh, float heading, int cx, int cy,
-               float base, uint16_t hull, uint16_t primary, uint16_t secondary, uint16_t ink) {
-  const float scale = base * sh.scale;
+               uint16_t hull, uint16_t primary, uint16_t secondary, uint16_t ink) {
+  const float scale = sh.scale;  // pixels per metre
   for (size_t p = 0; p < sh.count; ++p) {
     const jf::Poly& poly = sh.polys[p];
     const uint16_t fill = poly.part == 2 ? primary : poly.part == 3 ? secondary : hull;
@@ -69,15 +69,14 @@ void field(lgfx::LovyanGFX& g, const Colors& c, int y, const char* label, const 
 }  // namespace
 
 void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
-               const char* status_note) {
+               const char* header_left, const char* header_right) {
   const Colors c = colors(g);
   g.startWrite();
-  frame(g, c, status_note);
+  frame(g, c, header_left, header_right);
 
   // Left: the aircraft, pointing along its track, inside a heading ring.
   const int cx = 93, cy = 118;
   g.drawCircle(cx, cy, 70, c.faint);
-  jf::Category cat = jf::categorize(f.type);
   const jf::Airline* al = jf::airlineFor(f.callsign);
   uint16_t pri = c.ink, sec = c.faint;
   if (al != nullptr) {
@@ -85,7 +84,7 @@ void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
     sec = g.color565(al->r2, al->g2, al->b2);
   }
   const uint16_t hull = g.color565(252, 250, 242);
-  drawShape(g, jf::shapeFor(cat), static_cast<float>(f.track), cx, cy, 64.0f, hull, pri, sec,
+  drawShape(g, jf::shapeForType(f.type), static_cast<float>(f.track), cx, cy, hull, pri, sec,
             c.ink);
   g.setFont(&lgfx::fonts::Font2);
   g.setTextDatum(lgfx::middle_center);
@@ -115,6 +114,16 @@ void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
     g.drawString(al->name, 186, 90);
     g.fillRect(186, 34, 78, 3, pri);
     g.fillRect(264, 34, 40, 3, sec);
+  } else {  // unknown operator: show its code; registrations have no airline
+    char op[24];
+    if (jf::looksLikeAirlineCallsign(f.callsign)) {
+      snprintf(op, sizeof op, "Operator %.3s", f.callsign);
+    } else {
+      snprintf(op, sizeof op, "Private / other");
+    }
+    g.setFont(&lgfx::fonts::Font2);
+    g.setTextColor(c.faint);
+    g.drawString(op, 186, 90);
   }
   g.drawFastHLine(186, 108, 118, c.ink);
 
@@ -130,10 +139,10 @@ void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
 }
 
 void drawPlateMessage(lgfx::LovyanGFX& g, const char* msg, const char* detail,
-                      const char* status_note, bool error) {
+                      const char* header_left, const char* header_right, bool error) {
   const Colors c = colors(g);
   g.startWrite();
-  frame(g, c, status_note);
+  frame(g, c, header_left, header_right);
   g.setFont(&lgfx::fonts::FreeSansOblique12pt7b);
   g.setTextDatum(lgfx::middle_center);
   g.setTextColor(error ? c.accent : c.ink);

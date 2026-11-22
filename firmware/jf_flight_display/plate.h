@@ -4,10 +4,10 @@
 
 #include "flights.h"
 
-// index/count place the plane in the list (1-based on screen); status_note is shown
-// small in the header (e.g. "LIVE").
+// index/count place the plane in the list (dots); header_left/right are small texts in
+// the header line (e.g. "8 aircraft within 40 km" / "2/8  12s ago").
 void drawPlate(lgfx::LovyanGFX& gfx, const jf::Flight& f, int index, int count,
-               const char* status_note);
+               const char* header_left, const char* header_right);
 // Message plate when there is nothing to show (error=true draws it in red).
 void drawPlateMessage(lgfx::LovyanGFX& gfx, const char* msg, const char* detail,
-                      const char* status_note, bool error);
+                      const char* header_left, const char* header_right, bool error);

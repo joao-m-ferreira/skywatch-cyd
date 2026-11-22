@@ -23,6 +23,7 @@ bool fetchFailed = false;
 char lastError[48] = "";
 uint32_t lastPoll = 0;
 uint32_t lastRotate = 0;
+uint32_t lastFetchOk = 0;
 
 bool connectWifi() {
   WiFi.mode(WIFI_STA);
@@ -80,6 +81,7 @@ bool fetchFlights() {
       if (flightCount > 0) strncpy(keep, flights[selected].callsign, sizeof keep - 1);
       flightCount = jf::adsbToFlights(doc, HOME_LAT, HOME_LON, RADIUS_KM, flights,
                                       jf::kMaxFlights);
+      lastFetchOk = millis();
       selected = 0;
       for (int i = 0; i < flightCount; ++i) {
         if (strcmp(flights[i].callsign, keep) == 0) selected = i;
@@ -98,15 +100,24 @@ bool fetchFlights() {
 }
 
 void drawScreen() {
-  char note[24] = "LIVE";
-  if (flightCount > 0) snprintf(note, sizeof note, "LIVE %d/%d", selected + 1, flightCount);
+  char left[32], right[24];
+  snprintf(right, sizeof right, "%d/%d", selected + 1, flightCount);
+  if (lastFetchOk != 0) {
+    snprintf(left, sizeof left, "%d aircraft within %d km", flightCount, RADIUS_KM);
+    snprintf(right, sizeof right, "%d/%d  %us ago", selected + 1, flightCount,
+             static_cast<unsigned>((millis() - lastFetchOk) / 1000));
+  } else {
+    snprintf(left, sizeof left, "Flights nearby");
+    right[0] = '\0';
+  }
   if (flightCount == 0) {
+    right[0] = '\0';
     drawPlateMessage(tft, fetchFailed ? "Fetch failed" : "No aircraft in range",
-                     fetchFailed ? lastError : "", note, fetchFailed);
+                     fetchFailed ? lastError : "", left, right, fetchFailed);
     return;
   }
   if (selected >= flightCount) selected = 0;
-  drawPlate(tft, flights[selected], selected, flightCount, note);
+  drawPlate(tft, flights[selected], selected, flightCount, left, right);
 }
 
 void updateBacklight() {
@@ -118,7 +129,7 @@ void setup() {
   Serial.begin(115200);
   tft.init();
   tft.setRotation(1);  // 320x240 landscape
-  drawPlateMessage(tft, "Connecting...", WIFI_SSID, "LIVE", false);
+  drawPlateMessage(tft, "Connecting...", WIFI_SSID, "Flights nearby", "", false);
   connectWifi();  // a failure is retried by fetchFlights() in loop()
   lastPoll = millis() - kPollMs;
 }

@@ -8,4 +8,4 @@
 
 **Success criteria.** Firmware compiles in CI; the optional Go service tests pass on recorded fixtures; host-side parsing/format tests pass; on hardware a plane appears within ~20 s of boot (manual check).
 
-**Known gaps vs the stated v1 idea.** Route (origin/destination) is not implemented (no adsbdb lookup); airline is inferred from the callsign prefix for a built-in table of ~40 airlines only. Silhouettes are generic per class, not per airframe (no AI painting or photos, unlike the Overhead widget).
+**Known gaps vs the stated v1 idea.** Route (origin/destination) is not implemented (no adsbdb lookup); airline is inferred from the callsign prefix for a built-in table of ~140 operators (others show the 3-letter code). Silhouettes are generated per aircraft type for ~100 main types (class default otherwise), not per airframe (no AI painting or photos, unlike the Overhead widget).
