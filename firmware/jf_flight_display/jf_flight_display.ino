@@ -40,7 +40,7 @@ bool connectWifi() {
 
 // Standalone: query adsb.fi open data directly (HTTPS) and filter while streaming so the
 // large response never has to fit in RAM.
-bool fetchFlights() {
+bool fetchFlightsOnce() {
   if (WiFi.status() != WL_CONNECTED && !connectWifi()) return false;
   char url[128];
   snprintf(url, sizeof url, "https://opendata.adsb.fi/api/v2/lat/%.2f/lon/%.2f/dist/%d",
@@ -98,6 +98,15 @@ bool fetchFlights() {
   }
   http.end();
   return ok;
+}
+
+// The HTTPS body occasionally arrives truncated; one retry fixes it.
+bool fetchFlights() {
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    if (fetchFlightsOnce()) return true;
+    delay(400);
+  }
+  return false;
 }
 
 void drawScreen() {
