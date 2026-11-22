@@ -1,0 +1,141 @@
+# Tag-driven release: build in a CLEAN checkout -> verify the exact files -> publish. Nothing else publishes.
+# Used when the project ships artifacts (it has scripts/package.sh). The
+# project-specific parts live in three scripts the project owns; this file never changes per project:
+#   scripts/package.sh        builds the distributable files into dist/ (env VERSION is set)      [required]
+#   scripts/verify-package.sh smoke-tests THOSE files in dist/ (emulator, install, run --help...)  [required]
+#   scripts/release-setup.sh  installs toolchains the packager needs (optional, run before package)
+# scripts/check_artifacts.py refuses a dist/ with no version stamp or with a value from a
+# git-ignored local config file in it, and writes/verifies SHA256SUMS.
+#
+# Push a tag v<major>.<minor>.<patch>[-pre] to release. Run it by hand (Actions -> Release -> Run workflow) as a
+# REHEARSAL: it builds and verifies, never publishes. A failing build or verify publishes nothing. Release notes
+# come from docs/releases/<version>.md when it exists, else GitHub's generated notes.
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false   # never cancel a release half-way
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read   # `gh run list` for the green-CI gate: without it the API answers 403 and no tag can ever release
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      # actions are pinned to commit SHAs (v4): a release is the last place a moving tag is acceptable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - id: v
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$REF_TYPE" = tag ]; then
+            case "$REF_NAME" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "::error::tag $REF_NAME is not v<major>.<minor>.<patch>[-pre]"; exit 1;; esac
+            echo "version=${REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0-rehearsal" >> "$GITHUB_OUTPUT"
+          fi
+      - name: The tagged commit must be green on CI
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$GITHUB_SHA" --status success \
+                --json databaseId --jq length)
+          if [ "${n:-0}" -lt 1 ]; then
+            echo "::error::no successful ci.yml run for $GITHUB_SHA — nothing releases red (merge via a green PR, then tag that commit)"
+            exit 1
+          fi
+      - name: Toolchain setup (optional project hook)
+        run: if [ -x scripts/release-setup.sh ]; then scripts/release-setup.sh; fi
+      - name: Package
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          test -x scripts/package.sh || { echo "::error::scripts/package.sh is missing or not executable"; exit 1; }
+          rm -rf dist && mkdir dist
+          scripts/package.sh
+      - name: Refuse a bad build (version stamp, local secrets)
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          python3 scripts/check_artifacts.py check --version "$VERSION" --dir dist
+          python3 scripts/check_artifacts.py checksums --dir dist
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  verify:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: dist
+          path: dist/
+      - name: Checksums still match what build produced
+        run: python3 scripts/check_artifacts.py verify --dir dist
+      - name: Toolchain setup (optional project hook)
+        run: if [ -x scripts/release-setup.sh ]; then scripts/release-setup.sh; fi
+      - name: Smoke-test the exact files that would ship
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          test -x scripts/verify-package.sh || { echo "::error::scripts/verify-package.sh is missing or not executable"; exit 1; }
+          scripts/verify-package.sh dist
+
+  publish:
+    needs: [build, verify]
+    if: github.ref_type == 'tag'   # a manual run is a rehearsal: it never publishes
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write              # the only job that can write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish the verified files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          flags=()
+          if [ -f "docs/releases/$VERSION.md" ]; then flags+=(--notes-file "docs/releases/$VERSION.md"); else flags+=(--generate-notes); fi
+          case "$VERSION" in *-*) flags+=(--prerelease);; esac
+          # gh refuses a tag that already has a release: a published release is never overwritten
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" "${flags[@]}"
+      - name: What users download is what was verified
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir published
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS --dir published
+          cmp published/SHA256SUMS dist/SHA256SUMS
+          echo "released $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,7 @@
+firmware/jf_flight_display/secrets.h
+build/
+dist/
+*.bin
+*.elf
+firmware/test/test_flights
+.env

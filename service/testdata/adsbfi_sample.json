@@ -1,0 +1,8 @@
+{"ac":[
+{"hex":"4ca1","flight":"RYR123  ","t":"B738","r":"EI-ABC","lat":38.80,"lon":-9.10,"alt_baro":12000,"gs":310.4,"track":88.2},
+{"hex":"4ca2","flight":"TAP456","t":"A320","r":"CS-TNA","lat":38.74,"lon":-9.14,"alt_baro":3500,"gs":180,"track":200},
+{"hex":"4ca3","flight":"GND1","t":"A20N","lat":38.77,"lon":-9.13,"alt_baro":"ground","gs":5,"track":0},
+{"hex":"4ca4","t":"C172","r":"CS-DXX","lat":38.90,"lon":-9.20,"alt_baro":2000,"gs":90,"track":10},
+{"hex":"4ca5","flight":"NOPOS","t":"A320"},
+{"hex":"4ca6","flight":"FAR1","t":"B744","lat":45.0,"lon":5.0,"alt_baro":30000,"gs":450,"track":0}
+]}

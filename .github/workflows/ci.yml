@@ -1,0 +1,30 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: service/go.mod
+      - uses: arduino/setup-arduino-cli@v2
+      - name: setup
+        run: scripts/setup.sh
+      - name: lint
+        run: scripts/lint.sh
+      - name: test
+        run: scripts/test.sh
+      - name: build
+        run: scripts/build.sh
+      - name: docs
+        run: python3 scripts/check_docs.py
+      - name: release-tooling self-tests
+        run: |
+          python3 scripts/check_review_tier.py --self-test
+          python3 scripts/check_artifacts.py --self-test
