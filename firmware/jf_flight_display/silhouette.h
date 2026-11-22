@@ -1,4 +1,4 @@
-// Per-type vector aircraft silhouettes (top-down, nose up), generated from real
+// Per-type vector aircraft silhouettes (side view), generated from real
 // dimensions, plus aircraft classification. Original geometry; host-testable.
 #pragma once
 #include <stddef.h>
@@ -34,36 +34,46 @@ const AircraftSpec& specFor(const char* icao_type);
 size_t specCount();
 const AircraftSpec& specAt(size_t i);
 
-constexpr size_t kMaxPolyPoints = 8;
-constexpr size_t kMaxPolys = 10;
+constexpr size_t kMaxPolyPoints = 10;
+constexpr size_t kMaxPolys = 16;
 
-// A convex polygon in metres: x to the right, y down, nose at y = -length/2.
-// When mirror is true the polygon is also drawn reflected across x = 0.
+// Roles of a polygon, which decide how it is painted.
+enum Part {
+  kHull = 0,       // fuselage (hull colour, outlined)
+  kSurface = 1,    // wings, tailplane (hull colour, outlined)
+  kFin = 2,        // vertical tail (primary livery colour, outlined)
+  kEngine = 3,     // engine nacelles (secondary livery colour, outlined)
+  kGear = 4,       // landing gear, only drawn when the gear is down (dark)
+  kWindows = 5,    // window row: a dashed line from point 0 to point 1
+  kGlass = 6,      // cockpit windshield
+  kStripe = 7,     // livery cheatline (primary colour)
+  kDark = 8        // propellers, rotors, skids (dark)
+};
+
+// A convex polygon in metres, side view: x along the aircraft with the nose at
+// x = -length/2 (pointing left), y down, y = 0 on the fuselage centre line.
 struct Poly {
   size_t n;
   float x[kMaxPolyPoints];
   float y[kMaxPolyPoints];
-  bool mirror;
-  // 0 fuselage, 1 wings/tailplane (hull colour); 2 fin (primary livery colour);
-  // 3 engines (secondary livery colour).
   int part;
 };
 
 struct Shape {
   const Poly* polys;  // drawn in order, later ones on top
   size_t count;
-  float rotor_radius;   // metres; > 0 draws a rotor ring (helicopters)
-  float scale;          // pixels per metre so the aircraft fits the drawing area
-  float half_extent;    // all points lie within +-half_extent metres
+  float scale;        // pixels per metre so the aircraft fits the drawing area
+  float half_len;     // all points have |x| <= half_len (metres)
+  float top, bottom;  // vertical extent in metres (top < 0 < bottom)
 };
 
-// Builds the silhouette for a type. The result lives in static storage and is valid
-// until the next call (not reentrant).
+// Builds the side-view silhouette for a type. The result lives in static storage and is
+// valid until the next call (not reentrant).
 const Shape& shapeForType(const char* icao_type);
 
-// Rotates (x, y) clockwise by heading_deg (0 = north/up, 90 = east/right),
-// scales by `scale` and offsets to (cx, cy).
-void transformPoint(float x, float y, float heading_deg, float scale, int cx, int cy, int* sx,
-                    int* sy);
+// Maps shape coordinates to the screen. With facing_right the aircraft is mirrored so
+// its nose points right.
+void transformSide(float x, float y, bool facing_right, float scale, int cx, int cy, int* sx,
+                   int* sy);
 
 }  // namespace jf

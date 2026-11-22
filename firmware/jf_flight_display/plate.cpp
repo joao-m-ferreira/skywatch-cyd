@@ -29,31 +29,45 @@ void frame(lgfx::LovyanGFX& g, const Colors& c, const char* left, const char* ri
   g.drawFastHLine(10, 30, board::kScreenW - 20, c.ink);
 }
 
-void drawShape(lgfx::LovyanGFX& g, const jf::Shape& sh, float heading, int cx, int cy,
-               uint16_t hull, uint16_t primary, uint16_t secondary, uint16_t ink) {
-  const float scale = sh.scale;  // pixels per metre
+void drawShape(lgfx::LovyanGFX& g, const jf::Shape& sh, bool facing_right, int cx, int cy,
+               uint16_t hull, uint16_t primary, uint16_t secondary, uint16_t ink,
+               bool gear_down) {
+  const uint16_t glass = g.color565(170, 200, 222), window = g.color565(60, 70, 90);
   for (size_t p = 0; p < sh.count; ++p) {
     const jf::Poly& poly = sh.polys[p];
-    const uint16_t fill = poly.part == 2 ? primary : poly.part == 3 ? secondary : hull;
-    for (int m = 0; m < (poly.mirror ? 2 : 1); ++m) {
-      int px[jf::kMaxPolyPoints], py[jf::kMaxPolyPoints];
+    if (poly.part == jf::kGear && !gear_down) continue;
+    int px[jf::kMaxPolyPoints], py[jf::kMaxPolyPoints];
+    for (size_t i = 0; i < poly.n; ++i) {
+      jf::transformSide(poly.x[i], poly.y[i], facing_right, sh.scale, cx, cy, &px[i], &py[i]);
+    }
+    if (poly.part == jf::kWindows) {  // dashed row from point 0 to point 1
+      const int dx = px[1] - px[0], dy = py[1] - py[0];
+      const int steps = (dx < 0 ? -dx : dx) / 4;
+      for (int k = 0; k < steps; k += 1) {
+        g.fillRect(px[0] + dx * k / steps, py[0] + dy * k / steps, 2, 2, window);
+      }
+      continue;
+    }
+    uint16_t fill = hull;
+    bool outline = true;
+    switch (poly.part) {
+      case jf::kFin: fill = primary; break;
+      case jf::kEngine: fill = secondary; break;
+      case jf::kStripe: fill = primary; outline = false; break;
+      case jf::kGlass: fill = glass; outline = false; break;
+      case jf::kGear:
+      case jf::kDark: fill = ink; outline = false; break;
+      default: break;
+    }
+    for (size_t i = 1; i + 1 < poly.n; ++i) {  // convex fan
+      g.fillTriangle(px[0], py[0], px[i], py[i], px[i + 1], py[i + 1], fill);
+    }
+    if (outline) {
       for (size_t i = 0; i < poly.n; ++i) {
-        jf::transformPoint(m ? -poly.x[i] : poly.x[i], poly.y[i], heading, scale, cx, cy,
-                           &px[i], &py[i]);
-      }
-      for (size_t i = 1; i + 1 < poly.n; ++i) {  // convex fan
-        g.fillTriangle(px[0], py[0], px[i], py[i], px[i + 1], py[i + 1], fill);
-      }
-      for (size_t i = 0; i < poly.n; ++i) {  // outline, skipping the mirror seam on x = 0
         const size_t j = (i + 1) % poly.n;
-        if (poly.x[i] == 0.0f && poly.x[j] == 0.0f) continue;
         g.drawLine(px[i], py[i], px[j], py[j], ink);
       }
     }
-  }
-  if (sh.rotor_radius > 0.0f) {
-    g.drawCircle(cx, cy, static_cast<int>(scale * sh.rotor_radius), ink);
-    g.drawCircle(cx, cy, 3, ink);
   }
 }
 
@@ -74,29 +88,35 @@ void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
   g.startWrite();
   frame(g, c, header_left, header_right);
 
-  // Left: the aircraft, pointing along its track, inside a heading ring.
-  const int cx = 93, cy = 118;
-  g.drawCircle(cx, cy, 70, c.faint);
+  // Left: the aircraft in side view, nose pointing the way it is flying.
+  const int cx = 93, cy = 112;
   const jf::Airline* al = jf::airlineFor(f.callsign);
-  uint16_t pri = c.ink, sec = c.faint;
+  uint16_t pri = g.color565(120, 130, 150), sec = g.color565(90, 95, 105);
   if (al != nullptr) {
     pri = g.color565(al->r1, al->g1, al->b1);
     sec = g.color565(al->r2, al->g2, al->b2);
   }
   const uint16_t hull = g.color565(252, 250, 242);
-  drawShape(g, jf::shapeForType(f.type), static_cast<float>(f.track), cx, cy, hull, pri, sec,
-            c.ink);
+  const bool right = f.track > 0 && f.track < 180;  // eastbound: nose to the right
+  const bool gear = f.alt_ft < 1500 && f.speed_kt < 200;
+  const jf::Shape& sh = jf::shapeForType(f.type);
+  // Centre the drawing vertically on the middle of its own extent.
+  const int cyc = cy - static_cast<int>(sh.scale * (sh.top + sh.bottom) / 2.0f);
+  g.drawFastHLine(14, 200, 156, c.faint);  // ground reference line
+  drawShape(g, sh, right, cx, cyc, hull, pri, sec, c.ink, gear);
   g.setFont(&lgfx::fonts::Font2);
   g.setTextDatum(lgfx::middle_center);
-  g.setTextColor(c.accent);
-  g.drawString("N", cx, cy - 78);
+  g.setTextColor(c.faint);
+  char hdg[16];
+  snprintf(hdg, sizeof hdg, right ? "heading E >" : "< heading W");
+  g.drawString(hdg, cx, 186);
 
   // Page dots.
   const int dots = count > 8 ? 8 : count;
   for (int i = 0; i < dots; ++i) {
     int x = cx - (dots - 1) * 6 + i * 12;
-    if (i == index) g.fillCircle(x, 213, 3, c.ink);
-    else g.drawCircle(x, 213, 3, c.faint);
+    if (i == index) g.fillCircle(x, 216, 3, c.ink);
+    else g.drawCircle(x, 216, 3, c.faint);
   }
 
   // Divider + particulars (rows spaced so no line overlaps another).

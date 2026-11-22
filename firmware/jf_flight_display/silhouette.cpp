@@ -149,14 +149,13 @@ const AircraftSpec& specFor(const char* t) {
   return kDefJet;
 }
 
-// ---- Shape generation ----
+// ---- Shape generation (side view) ----
 static Poly gPolys[kMaxPolys];
 static Shape gShape;
 
-static Poly* addPoly(size_t* n, int part, bool mirror) {
+static Poly* addPoly(size_t* n, int part) {
   Poly* p = &gPolys[(*n)++];
   p->n = 0;
-  p->mirror = mirror;
   p->part = part;
   return p;
 }
@@ -171,120 +170,194 @@ static void rect(Poly* p, float x0, float y0, float x1, float y1) {
   pt(p, x1, y1);
   pt(p, x0, y1);
 }
+static void octagon(Poly* p, float cx, float cy, float r) {
+  for (int i = 0; i < 8; ++i) {
+    const float a = (45.0f * static_cast<float>(i) + 22.5f) * static_cast<float>(M_PI) / 180.0f;
+    pt(p, cx + r * cosf(a), cy + r * sinf(a));
+  }
+}
+// Engine pod seen from the side: a rounded lip at the front, flat top and bottom.
+static void pod(Poly* p, float x0, float x1, float cy, float half_h) {
+  const float xm = x0 + 0.25f * (x1 - x0);
+  pt(p, x0, cy - 0.8f * half_h);
+  pt(p, xm, cy - half_h);
+  pt(p, x1, cy - half_h);
+  pt(p, x1, cy + half_h);
+  pt(p, xm, cy + half_h);
+  pt(p, x0, cy + 0.8f * half_h);
+}
 static float rad(float d) { return d * static_cast<float>(M_PI) / 180.0f; }
 
 static void buildHeli(const AircraftSpec& s, size_t* n) {
-  const float L = s.length;
-  Poly* boom = addPoly(n, 1, false);
-  pt(boom, 0.025f * L, 0.15f * L);
-  pt(boom, 0.025f * L, 0.5f * L);
-  pt(boom, -0.025f * L, 0.5f * L);
-  pt(boom, -0.025f * L, 0.15f * L);
-  Poly* fin = addPoly(n, 2, true);
-  rect(fin, 0.025f * L, 0.42f * L, 0.10f * L, 0.5f * L);
-  Poly* cabin = addPoly(n, 0, true);
-  pt(cabin, 0, -0.30f * L);
-  pt(cabin, 0.10f * L, -0.24f * L);
-  pt(cabin, 0.14f * L, -0.10f * L);
-  pt(cabin, 0.14f * L, 0.08f * L);
-  pt(cabin, 0.08f * L, 0.20f * L);
-  pt(cabin, 0, 0.22f * L);
+  const float L = s.length, R = s.span / 2.0f;
+  // Skids and struts first, so the cabin covers their tops.
+  rect(addPoly(n, kDark), -0.20f * L, 0.27f * L, 0.18f * L, 0.295f * L);
+  rect(addPoly(n, kDark), -0.12f * L, 0.18f * L, -0.09f * L, 0.27f * L);
+  rect(addPoly(n, kDark), 0.08f * L, 0.18f * L, 0.11f * L, 0.27f * L);
+  // Tail boom and tail fin.
+  Poly* boom = addPoly(n, kSurface);
+  pt(boom, 0.12f * L, -0.10f * L);
+  pt(boom, 0.47f * L, -0.05f * L);
+  pt(boom, 0.47f * L, 0.0f);
+  pt(boom, 0.12f * L, 0.08f * L);
+  Poly* fin = addPoly(n, kFin);
+  pt(fin, 0.40f * L, -0.04f * L);
+  pt(fin, 0.45f * L, -0.20f * L);
+  pt(fin, 0.50f * L, -0.20f * L);
+  pt(fin, 0.48f * L, 0.0f);
+  // Cabin.
+  Poly* cab = addPoly(n, kHull);
+  pt(cab, -0.30f * L, 0.03f * L);
+  pt(cab, -0.22f * L, -0.13f * L);
+  pt(cab, 0.0f, -0.19f * L);
+  pt(cab, 0.18f * L, -0.12f * L);
+  pt(cab, 0.20f * L, 0.12f * L);
+  pt(cab, -0.20f * L, 0.20f * L);
+  Poly* gl = addPoly(n, kGlass);
+  pt(gl, -0.27f * L, 0.02f * L);
+  pt(gl, -0.20f * L, -0.10f * L);
+  pt(gl, -0.04f * L, -0.15f * L);
+  pt(gl, -0.04f * L, 0.04f * L);
+  rect(addPoly(n, kStripe), -0.18f * L, 0.10f * L, 0.18f * L, 0.14f * L);
+  // Rotor mast and blades.
+  rect(addPoly(n, kDark), -0.02f * L, -0.25f * L, 0.02f * L, -0.18f * L);
+  rect(addPoly(n, kDark), -R, -0.255f * L, R, -0.235f * L);
 }
 
 const Shape& shapeForType(const char* type) {
   const AircraftSpec& s = specFor(type);
   size_t n = 0;
-  const float L = s.length, h = L / 2.0f, b = s.span / 2.0f;
-  float half_extent = h > b ? h : b;
-  float rotor = 0.0f;
+  const float L = s.length, h = L / 2.0f;
 
   if (s.mount == Mount::Heli) {
     buildHeli(s, &n);
-    rotor = b;
   } else {
-    const float hw = s.fuselage_w * 0.65f, x0 = hw * 0.5f;  // drawn ~30% wider for legibility
-    const float tanL = tanf(rad(s.sweep_deg));
-    const float yr = -h + s.wing_pos * L;  // wing root leading edge
-    const float nw = s.nacelle_w * 1.2f, nl = 2.2f * nw;
-    auto leAt = [&](float x) { return yr + (x - x0) * tanL; };
+    const float D = s.fuselage_w;
+    const float nc = 1.6f * D, tc = 2.6f * D;
+    const bool high = s.mount == Mount::Prop;  // high-wing turboprops and light aircraft
+    const float b = s.span / 2.0f, tanL = tanf(rad(s.sweep_deg));
+    const float yw = high ? -0.46f * D : 0.30f * D;           // wing root height
+    const float dih = high ? 0.01f * b : 0.087f * b;          // dihedral rise at the tip
+    const float xr = -h + s.wing_pos * L;                     // wing root leading edge
+    float hf;                                                 // fin height above the fuselage
+    if (s.mount == Mount::Rear) hf = 0.16f * L;
+    else if (s.mount == Mount::Prop) hf = s.engines > 0 ? 0.14f * L : 0.12f * L;
+    else hf = D >= 5.0f ? 0.12f * L : 0.145f * L;
 
-    // Under-wing engines first: wing and fuselage then cover their rear part.
+    // Landing gear (drawn only when the gear is down).
+    {
+      const float gh = 0.6f * D, rw = (D >= 5.0f ? 0.14f : 0.16f) * D;
+      const float xn = -h + 0.16f * L, xm = xr + 0.5f * s.root_chord;
+      rect(addPoly(&n, kGear), xn - 0.03f * D, 0.40f * D, xn + 0.03f * D, 0.5f * D + gh);
+      octagon(addPoly(&n, kGear), xn, 0.5f * D + gh, rw);
+      rect(addPoly(&n, kGear), xm - 0.04f * D, 0.40f * D, xm + 0.04f * D, 0.5f * D + 1.05f * gh);
+      octagon(addPoly(&n, kGear), xm, 0.5f * D + 1.05f * gh, rw * 1.1f);
+    }
+    // Vertical fin, root along the top of the tail.
+    {
+      const float x1 = h - 0.16f * L + 0.55f * hf;
+      Poly* f = addPoly(&n, kFin);
+      pt(f, h - 0.16f * L, -0.5f * D);
+      pt(f, x1, -0.5f * D - hf);
+      pt(f, x1 + 0.07f * L, -0.5f * D - hf);
+      pt(f, h - 0.01f * L, -0.15f * D);
+    }
+    // Horizontal tailplane, seen edge-on (T-tail on rear-engine types).
+    {
+      const float ys = s.mount == Mount::Rear ? -0.5f * D - 0.95f * hf : -0.35f * D;
+      Poly* t = addPoly(&n, kSurface);
+      pt(t, h - 0.14f * L, ys + 0.03f * D);
+      pt(t, h - 0.03f * L, ys - 0.01f * L);
+      pt(t, h, ys - 0.01f * L);
+      pt(t, h - 0.11f * L, ys + 0.04f * D);
+    }
+    // Fuselage: rounded nose, up-swept tail cone.
+    {
+      Poly* f = addPoly(&n, kHull);
+      pt(f, -h, 0.10f * D);
+      pt(f, -h + 0.15f * nc, -0.28f * D);
+      pt(f, -h + 0.55f * nc, -0.47f * D);
+      pt(f, -h + nc, -0.5f * D);
+      pt(f, h - tc, -0.5f * D);
+      pt(f, h, -0.12f * D);
+      pt(f, h - 0.5f * tc, 0.32f * D);
+      pt(f, h - tc, 0.5f * D);
+      pt(f, -h + nc, 0.5f * D);
+      pt(f, -h + 0.4f * nc, 0.42f * D);
+    }
+    rect(addPoly(&n, kStripe), -h + nc, 0.10f * D, h - 0.9f * tc, 0.18f * D);  // cheatline
+    {
+      Poly* g = addPoly(&n, kGlass);  // cockpit windshield
+      pt(g, -h + 0.30f * nc, -0.30f * D);
+      pt(g, -h + 0.60f * nc, -0.46f * D);
+      pt(g, -h + 0.88f * nc, -0.46f * D);
+      pt(g, -h + 0.88f * nc, -0.30f * D);
+    }
+    if (D >= 2.0f) {  // window row
+      Poly* w = addPoly(&n, kWindows);
+      const float x0 = -h + 1.1f * nc, x1 = h - 0.95f * tc;
+      pt(w, x0, -0.25f * D);
+      pt(w, x1, -0.25f * D);
+      pt(w, x1, -0.20f * D);
+      pt(w, x0, -0.20f * D);
+    }
+    // Near wing, edge-on: tip displaced aft by the sweep, raised by the dihedral.
+    {
+      Poly* w = addPoly(&n, kSurface);
+      const float xt = xr + 0.9f * b * tanL;
+      pt(w, xr, yw);
+      pt(w, xt, yw - dih);
+      pt(w, xt + s.tip_chord, yw - dih + 0.05f * D);
+      pt(w, xr + s.root_chord, yw + 0.07f * D);
+    }
+    // Engines.
+    const float nw = s.nacelle_w * 0.95f, nl = 1.7f * nw;
+    auto leAt = [&](float xe) { return xr + (xe - 0.5f * D * 0.5f) * tanL; };
     if (s.mount == Mount::UnderWing && s.engines >= 2) {
       const float xs[2] = {s.engines == 4 ? 0.30f * b : 0.32f * b, 0.62f * b};
       for (int i = 0; i < (s.engines == 4 ? 2 : 1); ++i) {
         const float xe = xs[i], front = leAt(xe) - 0.4f * nl;
-        rect(addPoly(&n, 3, true), xe - nw / 2, front, xe + nw / 2, front + nl);
+        const float cy = yw - dih * (xe / b) + 0.07f * D + 0.45f * nw;
+        pod(addPoly(&n, kEngine), front, front + nl, cy, nw / 2);
       }
-    }
-    // Rear engines hang off the aft fuselage.
-    if (s.mount == Mount::Rear) {
-      const float front = -h + 0.62f * L, x1 = hw * 0.8f;
-      rect(addPoly(&n, 3, true), x1, front, x1 + nw, front + 3.0f * nw);
-    }
-    // Wing: swept and tapered, its root hidden under the fuselage.
-    {
-      Poly* w = addPoly(&n, 1, true);
-      const float tipLe = leAt(b);
-      pt(w, x0, yr);
-      pt(w, b, tipLe);
-      pt(w, b, tipLe + s.tip_chord);
-      pt(w, x0, yr + s.root_chord);
-    }
-    // Propeller nacelles sit on top of the wing.
-    if (s.mount == Mount::Prop && s.engines >= 2) {
+    } else if (s.mount == Mount::Rear) {
+      const float front = -h + 0.62f * L;
+      pod(addPoly(&n, kEngine), front, front + 3.0f * nw, -0.25f * D, nw / 2);
+    } else if (s.mount == Mount::Prop && s.engines >= 2) {
       const float xe = 0.30f * b, pl = 5.0f * nw, front = leAt(xe) - 0.55f * pl;
-      rect(addPoly(&n, 3, true), xe - nw / 2, front, xe + nw / 2, front + pl);
+      const float cy = yw + 0.25f * D;
+      pod(addPoly(&n, kEngine), front, front + pl, cy, 0.7f * nw);
+      rect(addPoly(&n, kDark), front - 0.03f * D, cy - 1.7f * nw, front, cy + 1.7f * nw);  // prop
+    } else if (s.mount == Mount::Prop) {
+      rect(addPoly(&n, kDark), -h - 0.03f * D, -0.05f * D - 0.73f * D, -h, -0.05f * D + 0.73f * D);
     }
-    // Tailplane.
-    {
-      const bool straight = s.sweep_deg < 1.0f;
-      const float ts = 0.36f * s.span, tcr = (straight ? 0.25f : 0.32f) * ts,
-                  tct = (straight ? 0.22f : 0.11f) * ts;
-      const float te = h - 0.075f * L, le = te - tcr;
-      const float tipLe = le + (ts / 2 - x0) * tanf(rad(straight ? 5.0f : 33.0f));
-      Poly* t = addPoly(&n, 1, true);
-      pt(t, x0, le);
-      pt(t, ts / 2, tipLe);
-      pt(t, ts / 2, tipLe + tct);
-      pt(t, x0, te);
-    }
-    // Fuselage: rounded nose, tapered tail.
-    {
-      const float nc = 1.6f * s.fuselage_w, tc = 2.6f * s.fuselage_w;
-      Poly* f = addPoly(&n, 0, true);
-      pt(f, 0, -h);
-      pt(f, 0.55f * hw, -h + 0.18f * nc);
-      pt(f, 0.92f * hw, -h + 0.55f * nc);
-      pt(f, hw, -h + nc);
-      pt(f, hw, h - tc);
-      pt(f, 0.7f * hw, h - 0.5f * tc);
-      pt(f, 0.2f * hw, h - 0.05f * tc);
-      pt(f, 0, h);
-    }
-    // Fin, seen from above as a stripe along the tail.
-    rect(addPoly(&n, 2, true), 0, h - 0.17f * L, 0.5f * hw, h - 0.03f * L);
-    // Make it a proper half-polygon (a rectangle touching the centre line).
-    gPolys[n - 1].x[3] = 0;
-    gPolys[n - 1].x[0] = 0;
   }
 
-  // Fit the drawing area: small aircraft smaller, the biggest fill the ring.
-  float frac = half_extent / 40.0f;
+  // Extent and fit: small aircraft draw smaller, the biggest fill the panel.
+  float hl = 0, top = 0, bottom = 0;
+  for (size_t p = 0; p < n; ++p) {
+    for (size_t i = 0; i < gPolys[p].n; ++i) {
+      const float ax = fabsf(gPolys[p].x[i]);
+      if (ax > hl) hl = ax;
+      if (gPolys[p].y[i] < top) top = gPolys[p].y[i];
+      if (gPolys[p].y[i] > bottom) bottom = gPolys[p].y[i];
+    }
+  }
+  float frac = L / 70.0f;
   if (frac > 1.0f) frac = 1.0f;
   gShape.polys = gPolys;
   gShape.count = n;
-  gShape.rotor_radius = rotor;
-  gShape.half_extent = half_extent;
-  gShape.scale = (40.0f + 24.0f * frac) / half_extent;
+  gShape.half_len = hl;
+  gShape.top = top;
+  gShape.bottom = bottom;
+  gShape.scale = (90.0f + 58.0f * frac) / (2.0f * hl);
   return gShape;
 }
 
-void transformPoint(float x, float y, float heading_deg, float scale, int cx, int cy, int* sx,
-                    int* sy) {
-  const float h = heading_deg * static_cast<float>(M_PI) / 180.0f;
-  const float c = cosf(h), s = sinf(h);
-  *sx = cx + static_cast<int>(lroundf(scale * (x * c - y * s)));
-  *sy = cy + static_cast<int>(lroundf(scale * (x * s + y * c)));
+void transformSide(float x, float y, bool facing_right, float scale, int cx, int cy, int* sx,
+                   int* sy) {
+  *sx = cx + static_cast<int>(lroundf(scale * (facing_right ? -x : x)));
+  *sy = cy + static_cast<int>(lroundf(scale * y));
 }
 
 }  // namespace jf

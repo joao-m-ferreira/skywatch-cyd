@@ -95,13 +95,11 @@ int main() {
   CHECK(jf::categorize("") == Category::Jet);
   CHECK(jf::categorize(nullptr) == Category::Jet);
 
-  int sx, sy;  // nose (0,-1): north at heading 0, east at 90, south at 180
-  jf::transformPoint(0, -1, 0, 10, 100, 100, &sx, &sy);
-  CHECK(sx == 100 && sy == 90);
-  jf::transformPoint(0, -1, 90, 10, 100, 100, &sx, &sy);
-  CHECK(sx == 110 && sy == 100);
-  jf::transformPoint(0, -1, 180, 10, 100, 100, &sx, &sy);
-  CHECK(sx == 100 && sy == 110);
+  int sx, sy;  // side view: nose (-x) points left, or right when mirrored
+  jf::transformSide(-10, 2, false, 2, 100, 100, &sx, &sy);
+  CHECK(sx == 80 && sy == 104);
+  jf::transformSide(-10, 2, true, 2, 100, 100, &sx, &sy);
+  CHECK(sx == 120 && sy == 104);
   // Per-type silhouettes: every spec resolves to itself (no shadowing by an earlier,
   // shorter prefix) and generates convex, in-bounds polygons.
   for (size_t i = 0; i < jf::specCount(); ++i) {
@@ -111,22 +109,25 @@ int main() {
                          "CRJ9", "AT76", "DH8D", "C172", "GLF5", "EC35", "ZZZZ", "", "A35K", "A343"};
   for (const char* ty : types) {
     const jf::Shape& sh = jf::shapeForType(ty);
-    CHECK(sh.count > 0 && sh.count <= jf::kMaxPolys && sh.scale > 0.0f && sh.half_extent > 0.0f);
+    CHECK(sh.count > 0 && sh.count <= jf::kMaxPolys && sh.scale > 0.0f && sh.half_len > 0.0f);
+    CHECK(sh.top < 0.0f && sh.bottom > 0.0f);
+    CHECK(sh.half_len <= jf::specFor(ty).length * 0.56f);   // nothing sticks out past the ends
+    CHECK(sh.half_len >= jf::specFor(ty).length * 0.49f);
     for (size_t p = 0; p < sh.count; ++p) {
       const size_t n = sh.polys[p].n;
       CHECK(n >= 3 && n <= jf::kMaxPolyPoints);
-      CHECK(sh.polys[p].part >= 0 && sh.polys[p].part <= 3);
+      CHECK(sh.polys[p].part >= jf::kHull && sh.polys[p].part <= jf::kDark);
       int pos = 0, neg = 0;  // convex: the renderer fills polygons as a triangle fan
       for (size_t i = 0; i < n; ++i) {
-        CHECK(sh.polys[p].x[i] >= -sh.half_extent - 0.01f && sh.polys[p].x[i] <= sh.half_extent + 0.01f);
-        CHECK(sh.polys[p].y[i] >= -sh.half_extent - 0.01f && sh.polys[p].y[i] <= sh.half_extent + 0.01f);
+        CHECK(sh.polys[p].x[i] >= -sh.half_len - 0.01f && sh.polys[p].x[i] <= sh.half_len + 0.01f);
+        CHECK(sh.polys[p].y[i] >= sh.top - 0.01f && sh.polys[p].y[i] <= sh.bottom + 0.01f);
         const size_t j = (i + 1) % n, k = (i + 2) % n;
         float cr = (sh.polys[p].x[j] - sh.polys[p].x[i]) * (sh.polys[p].y[k] - sh.polys[p].y[j]) -
                    (sh.polys[p].y[j] - sh.polys[p].y[i]) * (sh.polys[p].x[k] - sh.polys[p].x[j]);
         if (cr > 1e-5f) ++pos;
         if (cr < -1e-5f) ++neg;
       }
-      if (!(pos == 0 || neg == 0)) printf("non-convex poly %zu of %s\n", p, ty);
+      if (!(pos == 0 || neg == 0)) printf("non-convex poly %zu (part %d) of '%s'\n", p, sh.polys[p].part, ty);
       CHECK(pos == 0 || neg == 0);
     }
   }
@@ -138,7 +139,6 @@ int main() {
   CHECK(jf::specFor("CRJ9").mount == jf::Mount::Rear);
   CHECK(jf::specFor("AT76").mount == jf::Mount::Prop);
   CHECK(jf::specFor("EC35").mount == jf::Mount::Heli);
-  CHECK(jf::shapeForType("A388").scale < jf::shapeForType("C172").scale);  // px per metre
 
   const jf::Airline* a = jf::airlineFor("RYR8XY");
   CHECK(a != nullptr && strcmp(a->name, "Ryanair") == 0 && a->b1 == 144);
