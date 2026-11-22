@@ -137,10 +137,12 @@ void drawScreen() {
 }
 
 // RGB LED on the back of the board (active low). Shows the airline's primary colour;
-// colours are normalised to full brightness for their hue, then dimmed (the LED is bright).
+// colours are normalised to full brightness for their hue, then scaled by kLedBrightness.
+constexpr float kLedBrightness = 1.0f;  // 0..1 (was 0.35, too dim to see across the room)
+
 void setLed(int r, int g, int b) {
   const int peak = r > g ? (r > b ? r : b) : (g > b ? g : b);
-  const float k = peak > 0 ? 255.0f / static_cast<float>(peak) * 0.35f : 0.0f;
+  const float k = peak > 0 ? 255.0f / static_cast<float>(peak) * kLedBrightness : 0.0f;
   ledcWrite(board::kLedR, 255 - static_cast<int>(static_cast<float>(r) * k));
   ledcWrite(board::kLedG, 255 - static_cast<int>(static_cast<float>(g) * k));
   ledcWrite(board::kLedB, 255 - static_cast<int>(static_cast<float>(b) * k));
