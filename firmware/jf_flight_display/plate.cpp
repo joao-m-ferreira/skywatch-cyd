@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 #include "airline.h"
+#include "livery.h"
 #include "board.h"
 #include "model3d.h"
 
@@ -46,23 +47,53 @@ void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
   g.startWrite();
   frame(g, c, header_left, header_right);
 
-  // Left: the aircraft as a small shaded 3D model, nose pointing the way it is flying.
+  // Left: the aircraft as a small shaded 3D model (dark outline), nose pointing the way it
+  // is flying, in the airline's livery.
   const jf::Airline* al = jf::airlineFor(f.callsign);
+  const jf::Livery lv = jf::liveryFor(al);
   uint16_t pri = g.color565(120, 130, 150), sec = g.color565(90, 95, 105);
   jf::Palette pal = {{252, 250, 242}, {222, 222, 228}, {120, 130, 150}, {90, 95, 105},
-                     {150, 190, 220}, {44, 32, 22}};
+                     {150, 190, 220}, {44, 32, 22},    {255, 255, 255}, {205, 205, 210},
+                     {120, 130, 150}, lv.nose_red,     lv.tail, lv.body};
   if (al != nullptr) {
     pal.primary = {al->r1, al->g1, al->b1};
     pal.secondary = {al->r2, al->g2, al->b2};
     pri = g.color565(al->r1, al->g1, al->b1);
     sec = g.color565(al->r2, al->g2, al->b2);
   }
+  switch (lv.fin_base) {
+    case jf::kFinWhite: pal.fin = {250, 250, 250}; break;
+    case jf::kFinSecondary: pal.fin = pal.secondary; break;
+    default: pal.fin = pal.primary; break;
+  }
+  pal.motif = lv.fin_base != jf::kFinPrimary ? pal.primary
+              : lv.white_motif               ? jf::Rgb{255, 255, 255}
+                                             : pal.secondary;
+  if (lv.engines == 1) pal.engine = pal.primary;
+  if (lv.engines == 2) pal.engine = pal.secondary;
+  switch (lv.hull) {  // tinted fuselages
+    case jf::kHullPearl: pal.hull = {214, 214, 212}; break;
+    case jf::kHullChampagne: pal.hull = {240, 230, 206}; break;
+    case jf::kHullSky: pal.hull = {150, 200, 235}; break;
+    default: break;
+  }
+  pal.belly = {static_cast<uint8_t>(pal.hull.r * 0.88f), static_cast<uint8_t>(pal.hull.g * 0.88f),
+               static_cast<uint8_t>(pal.hull.b * 0.9f)};
   const bool right = f.track > 0 && f.track < 180;  // eastbound: nose to the right
   const jf::Mesh& mesh = jf::buildAircraft(f.type, pal);
   jf::ScreenTri* tris =
       static_cast<jf::ScreenTri*>(malloc(jf::kMaxTris * sizeof(jf::ScreenTri)));  // freed below
   if (tris != nullptr) {
-    const size_t n = jf::projectMesh(mesh, right, 93, 108, 150, 128, tris, jf::kMaxTris);
+    const size_t n = jf::projectMesh(mesh, right, 92, 112, 146, 128, tris, jf::kMaxTris);
+    const uint16_t outline = g.color565(20, 24, 32);
+    for (int o = 0; o < 4; ++o) {  // 1 px dark outline around the silhouette
+      const int dx = (o == 0) - (o == 1), dy = (o == 2) - (o == 3);
+      for (size_t i = 0; i < n; ++i) {
+        const jf::ScreenTri& t = tris[i];
+        g.fillTriangle(t.x[0] + dx, t.y[0] + dy, t.x[1] + dx, t.y[1] + dy, t.x[2] + dx,
+                       t.y[2] + dy, outline);
+      }
+    }
     for (size_t i = 0; i < n; ++i) {
       const jf::ScreenTri& t = tris[i];
       g.fillTriangle(t.x[0], t.y[0], t.x[1], t.y[1], t.x[2], t.y[2],
@@ -75,12 +106,12 @@ void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
   g.setTextColor(c.faint);
   char hdg[16];
   snprintf(hdg, sizeof hdg, right ? "heading E >" : "< heading W");
-  g.drawString(hdg, 93, 196);
+  g.drawString(hdg, 92, 190);
 
   // Page dots.
   const int dots = count > 8 ? 8 : count;
   for (int i = 0; i < dots; ++i) {
-    int x = 93 - (dots - 1) * 6 + i * 12;
+    int x = 92 - (dots - 1) * 6 + i * 12;
     if (i == index) g.fillCircle(x, 216, 3, c.ink);
     else g.drawCircle(x, 216, 3, c.faint);
   }

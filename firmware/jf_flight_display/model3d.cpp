@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <algorithm>
 
@@ -21,7 +22,16 @@ static size_t addV(float x, float y, float z) {
 static void addT(size_t a, size_t b, size_t c, Rgb col) {
   if (gMesh.nt >= kMaxTris) return;
   gMesh.t[gMesh.nt++] = {static_cast<uint16_t>(a), static_cast<uint16_t>(b),
-                         static_cast<uint16_t>(c), col};
+                         static_cast<uint16_t>(c), col, 0, 0, 0};
+}
+// A flat quad lying on a surface whose outward direction is (0, side, 0).
+static void addOverlay(float x0, float x1, float z0, float z1, float y, int side, Rgb col) {
+  const size_t a = addV(x0, y, z0), b = addV(x1, y, z0), c = addV(x1, y, z1), d = addV(x0, y, z1);
+  if (gMesh.nt + 2 > kMaxTris) return;
+  gMesh.t[gMesh.nt++] = {static_cast<uint16_t>(a), static_cast<uint16_t>(b), static_cast<uint16_t>(c),
+                         col, 0, static_cast<int8_t>(side), 0};
+  gMesh.t[gMesh.nt++] = {static_cast<uint16_t>(a), static_cast<uint16_t>(c), static_cast<uint16_t>(d),
+                         col, 0, static_cast<int8_t>(side), 0};
 }
 static void addQuad(size_t a, size_t b, size_t c, size_t d, Rgb col) {
   addT(a, b, c, col);
@@ -63,6 +73,16 @@ static void addVertical(float x_le0, float x_te0, float z0, float x_le1, float x
                        {x_te1, y0 - half_t, z1}, {x_te0, y0 - half_t, z0}};
   const Vertex q[4] = {{x_le0, y0 + half_t, z0}, {x_le1, y0 + half_t, z1},
                        {x_te1, y0 + half_t, z1}, {x_te0, y0 + half_t, z0}};
+  addSlab(p, q, col);
+}
+
+// Winglet / fin-like slab from (z0, y0) up to (z1, y1): leading edges x_le0 -> x_le1.
+static void addWinglet(float x_le0, float x_te0, float z0, float y0, float x_le1, float x_te1,
+                       float z1, float y1, float half_t, Rgb col) {
+  const Vertex p[4] = {{x_le0, y0 - half_t, z0}, {x_le1, y1 - half_t, z1},
+                       {x_te1, y1 - half_t, z1}, {x_te0, y0 - half_t, z0}};
+  const Vertex q[4] = {{x_le0, y0 + half_t, z0}, {x_le1, y1 + half_t, z1},
+                       {x_te1, y1 + half_t, z1}, {x_te0, y0 + half_t, z0}};
   addSlab(p, q, col);
 }
 
@@ -109,6 +129,57 @@ static void loft(const Ring* rings, size_t n, F seg_color) {
   }
 }
 
+// Colour of the fin at (u, v): u runs leading edge to trailing edge, v root to tip.
+static Rgb finColor(const Palette& pal, float u, float v) {
+  bool motif = false;
+  switch (pal.tail) {
+    case kTailDisc: {
+      const float du = (u - 0.5f) * 1.1f, dv = (v - 0.55f) * 0.9f;
+      motif = du * du + dv * dv < 0.075f;
+      break;
+    }
+    case kTailDiagonal: {
+      const float d = u - 0.55f * v;
+      motif = d > 0.15f && d < 0.45f;
+      break;
+    }
+    case kTailStripes: motif = static_cast<int>(v * 6.0f) % 2 == 1; break;
+    case kTailSplit: motif = u > 0.5f; break;
+    case kTailCross:
+      motif = (fabsf(u - 0.5f) < 0.13f && v > 0.22f && v < 0.88f) ||
+              (fabsf(v - 0.55f) < 0.11f && u > 0.22f && u < 0.78f);
+      break;
+    case kTailSolid: break;
+    case kTailChecker: motif = (static_cast<int>(u * 5.0f) + static_cast<int>(v * 5.0f)) % 2 == 1; break;
+    case kTailDiagSplit: motif = (u - 0.6f * v) > 0.3f; break;
+    default: motif = v < 0.2f; break;  // kTailBand
+  }
+  return motif ? pal.motif : pal.fin;
+}
+
+// Fin as a grid of cells on both faces so a design can be painted on it.
+static void addPatternFin(float x_le0, float x_te0, float z0, float x_le1, float x_te1, float z1,
+                          float half_t, const Palette& pal) {
+  constexpr int NU = 6, NV = 5;
+  for (int side = -1; side <= 1; side += 2) {
+    size_t id[NV + 1][NU + 1];
+    for (int j = 0; j <= NV; ++j) {
+      const float v = static_cast<float>(j) / NV;
+      const float le = x_le0 + (x_le1 - x_le0) * v, te = x_te0 + (x_te1 - x_te0) * v;
+      for (int i = 0; i <= NU; ++i) {
+        const float u = static_cast<float>(i) / NU;
+        id[j][i] = addV(le + (te - le) * u, side * half_t, z0 + (z1 - z0) * v);
+      }
+    }
+    for (int j = 0; j < NV; ++j) {
+      for (int i = 0; i < NU; ++i) {
+        addQuad(id[j][i], id[j][i + 1], id[j + 1][i + 1], id[j + 1][i],
+                finColor(pal, (i + 0.5f) / NU, (j + 0.5f) / NV));
+      }
+    }
+  }
+}
+
 static void buildHeli(const AircraftSpec& s, const Palette& pal) {
   const float L = s.length, R = s.span / 2.0f;
   // Skids.
@@ -142,6 +213,25 @@ static void buildHeli(const AircraftSpec& s, const Palette& pal) {
   addQuad(b0, b1, b2, b3, pal.dark);
 }
 
+enum Winglet { kWNone, kWFence, kWShark, kWBlend, kWScimitar, kWCant };
+
+static bool hasPrefix(const char* t, const char* p) { return t != nullptr && strncmp(t, p, strlen(p)) == 0; }
+static bool isNeo(const char* t) {
+  return hasPrefix(t, "A19N") || hasPrefix(t, "A20N") || hasPrefix(t, "A21N") ||
+         hasPrefix(t, "A338") || hasPrefix(t, "A339") || hasPrefix(t, "B38M") ||
+         hasPrefix(t, "B39M") || hasPrefix(t, "B37M");
+}
+static Winglet wingletFor(const char* t, const AircraftSpec& s) {
+  if (s.mount != Mount::UnderWing) return kWNone;
+  for (const char* p : {"B37M", "B38M", "B39M", "B3XM"}) if (hasPrefix(t, p)) return kWScimitar;
+  for (const char* p : {"A318", "A319", "A320", "A321"}) if (hasPrefix(t, p)) return kWFence;
+  for (const char* p : {"A19N", "A20N", "A21N", "A338", "A339", "A35", "BCS"}) if (hasPrefix(t, p)) return kWShark;
+  if (hasPrefix(t, "B73") || hasPrefix(t, "B75")) return kWBlend;
+  for (const char* p : {"E1", "E7", "E29", "A332", "A333", "A34", "B74", "A388"}) if (hasPrefix(t, p)) return kWCant;
+  for (const char* p : {"B77", "B78", "B76"}) if (hasPrefix(t, p)) return kWNone;  // raked tips
+  return kWShark;
+}
+
 const Mesh& buildAircraft(const char* type, const Palette& pal) {
   const AircraftSpec& s = specFor(type);
   gMesh.nv = gMesh.nt = 0;
@@ -150,7 +240,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
     buildHeli(s, pal);
     return gMesh;
   }
-  const float L = s.length, h = L / 2.0f, D = s.fuselage_w * 1.3f, R = D / 2.0f;  // chunkier for legibility
+  const float L = s.length, h = L / 2.0f, D = s.fuselage_w * 1.45f, R = D / 2.0f;  // chunkier for legibility
   const float b = s.span / 2.0f, tanL = tanf(rad(s.sweep_deg));
   const bool high = s.mount == Mount::Prop;
   const float nc = 1.6f * D, tc = 2.6f * D;
@@ -165,7 +255,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
     const float r = fmaxf(0.015f * R, R * sqrtf(fmaxf(0.0f, 2.0f * u - u * u)));
     rg[nr++] = {h - nc * u, -0.12f * R * (1.0f - u), r, r};
   }
-  constexpr int kCabin = 12;
+  constexpr int kCabin = 14;
   for (int i = 1; i < kCabin - 1; ++i) {
     const float t = static_cast<float>(i) / (kCabin - 1);
     rg[nr++] = {(h - nc) + ((-h + tc) - (h - nc)) * t, 0.0f, R, R};
@@ -176,13 +266,31 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
     const float r = R * (1.0f - 0.88f * powf(v, 1.1f));
     rg[nr++] = {-h + tc - tc * v, 0.5f * R * v * v, r, r};
   }
+  // Deck shape: 747 upper-deck hump over the front cabin, A380 full double deck.
+  for (size_t i = 0; i < nr; ++i) {
+    const float dx = h - rg[i].x;
+    if (s.deck == 2) {
+      rg[i].rz *= 1.18f;
+      rg[i].zc += 0.06f * R * (rg[i].rz > 0.2f * R ? 1.0f : 0.0f);
+    } else if (s.deck == 1) {
+      float bump = 0.0f;
+      if (dx >= 0.07f * L && dx < 0.12f * L) bump = (dx - 0.07f * L) / (0.05f * L);
+      else if (dx >= 0.12f * L && dx < 0.24f * L) bump = 1.0f;
+      else if (dx >= 0.24f * L && dx < 0.34f * L) bump = (0.34f * L - dx) / (0.10f * L);
+      rg[i].rz = R * (rg[i].rz / R) * (1.0f + 0.22f * bump);
+      rg[i].zc += 0.22f * R * bump;
+    }
+  }
   const bool windows = D >= 2.0f;
+  const bool neo = isNeo(type);
   const Rgb window = {static_cast<uint8_t>(pal.glass.r * 0.45f), static_cast<uint8_t>(pal.glass.g * 0.5f),
                       static_cast<uint8_t>(pal.glass.b * 0.6f)};
   loft(rg, nr, [&](size_t i, int j) {
     if (i >= 4 && i <= 6 && (j == 10 || j == 11 || j == 0 || j == 1)) return pal.glass;  // windshield
-    const bool cabin = i >= kNose && i < kNose + kCabin - 1;
-    if (windows && cabin && (j == 2 || j == 9) && (i % 2 == 0)) return window;
+    if (pal.nose_red && i < 4) return pal.primary;                       // red nose cone
+    if (neo && i >= 4 && i <= 6 && (j == 9 || j == 2)) return pal.dark;  // "raccoon mask"
+    if (pal.body == kBodyFull && !(i >= 4 && i <= 6 && j == 0)) return pal.primary;
+    if (pal.body == kBodyBelly && i >= 5 && (j >= 3 && j <= 8)) return pal.primary;          // coloured belly
     if (j == 3 || j == 8) return i >= 5 ? pal.primary : pal.hull;                            // cheatline
     if (j >= 4 && j <= 7) return pal.belly;
     return pal.hull;
@@ -200,14 +308,17 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   auto zAt = [&](float ye) { return z_root + dih * (ye - y_root) / (b - y_root); };
 
   // Engines first (the wing is drawn over their rear part by depth sorting anyway).
-  const float nw = s.nacelle_w * 0.95f;
+  const float nw = s.nacelle_w * 1.35f * (neo ? 1.12f : 1.0f);
   if (s.mount == Mount::UnderWing && s.engines >= 2) {
-    const float ys[2] = {s.engines == 4 ? 0.30f * b : 0.32f * b, 0.62f * b};
-    for (int i = 0; i < (s.engines == 4 ? 2 : 1); ++i) {
-      const float ye = ys[i], nl = 1.9f * nw, front = leAt(ye) + 0.45f * nl;
+    const float ys6[3] = {0.20f * b, 0.40f * b, 0.62f * b};
+    const float ys4[2] = {0.30f * b, 0.62f * b};
+    const float ys2[1] = {0.32f * b};
+    const float* ys = s.engines == 6 ? ys6 : s.engines == 4 ? ys4 : ys2;
+    for (int i = 0; i < s.engines / 2; ++i) {
+      const float ye = ys[i], nl = 1.8f * nw, front = leAt(ye) + (neo ? 0.62f : 0.5f) * nl;
       const float zc = zAt(ye) - 0.55f * nw;
       for (int sg = -1; sg <= 1; sg += 2) {
-        addCyl(front, front - nl, sg * ye, zc, nw / 2, nw / 2 * 0.85f, pal.secondary, pal.dark);
+        addCyl(front, front - nl, sg * ye, zc, nw / 2, nw / 2 * 0.85f, pal.engine, pal.dark);
         addVertical(front - 0.15f * nl, front - 0.85f * nl, zc + 0.4f * nw, front - 0.3f * nl,
                     front - 0.9f * nl, zAt(ye) + 0.02f, sg * ye, 0.04f * nw, pal.hull);  // pylon
       }
@@ -215,13 +326,17 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   } else if (s.mount == Mount::Rear) {
     const float front = h - 0.58f * L;
     for (int sg = -1; sg <= 1; sg += 2) {
-      addCyl(front, front - 3.0f * nw, sg * (R + 0.55f * nw), 0.35f * R, nw / 2, nw / 2 * 0.8f, pal.secondary, pal.dark);
+      addCyl(front, front - 3.0f * nw, sg * (R + 0.55f * nw), 0.35f * R, nw / 2, nw / 2 * 0.8f, pal.engine, pal.dark);
+    }
+    if (s.engines == 3) {  // tri-jet: third engine in the tail, at the base of the fin
+      const float fx = -h + 0.30f * L;
+      addCyl(fx, fx - 3.2f * nw, 0, 0.95f * R + 0.3f * nw, nw / 2, nw / 2 * 0.8f, pal.engine, pal.dark);
     }
   } else if (s.mount == Mount::Prop && s.engines >= 2) {
     const float ye = 0.30f * b, pl = 5.0f * nw, front = leAt(ye) + 0.55f * pl;
     const float zc = zAt(ye) - 0.2f * nw;
     for (int sg = -1; sg <= 1; sg += 2) {
-      addCyl(front, front - pl, sg * ye, zc, 0.6f * nw, 0.5f * nw, pal.secondary, pal.secondary);
+      addCyl(front, front - pl, sg * ye, zc, 0.6f * nw, 0.5f * nw, pal.engine, pal.engine);
       const float pr = 1.7f * nw, px = front + 0.02f * nw;  // propeller: two crossed blades
       const size_t a0 = addV(px, sg * ye - 0.06f * nw, zc + pr), a1 = addV(px, sg * ye + 0.06f * nw, zc + pr);
       const size_t a2 = addV(px, sg * ye + 0.06f * nw, zc - pr), a3 = addV(px, sg * ye - 0.06f * nw, zc - pr);
@@ -237,10 +352,26 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   for (int sg = -1; sg <= 1; sg += 2) {
     addHorizontal(static_cast<float>(sg), y_root, b, x_le, x_te, x_le_tip, x_te_tip, z_root,
                   z_root + dih, t_root, t_tip, pal.hull);
-    if (s.mount == Mount::UnderWing) {  // winglet
-      const float wl = 0.045f * s.span;
-      addVertical(x_le_tip, x_te_tip, z_root + dih, x_le_tip - 0.7f * wl, x_te_tip - 0.1f * wl,
-                  z_root + dih + wl, sg * b, 0.03f * D, pal.primary);
+    const float zt = z_root + dih, S = s.span, ht = 0.03f * D;
+    switch (wingletFor(type, s)) {
+      case kWFence:  // small fence above and below the tip
+        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.3f * S * 0.02f, x_te_tip - 0.1f, zt + 0.02f * S, sg * b, ht, pal.primary);
+        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.2f, x_te_tip - 0.1f, zt - 0.012f * S, sg * b, ht, pal.primary);
+        break;
+      case kWShark:  // tall, curved, swept back
+        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.055f * S, x_te_tip - 0.012f * S, zt + 0.05f * S, sg * (b + 0.008f * S), ht, pal.primary);
+        break;
+      case kWBlend:  // tall blended winglet
+        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.04f * S, x_te_tip - 0.02f * S, zt + 0.06f * S, sg * (b + 0.012f * S), ht, pal.primary);
+        break;
+      case kWScimitar:  // split scimitar: blended winglet plus a lower blade
+        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.045f * S, x_te_tip - 0.015f * S, zt + 0.055f * S, sg * (b + 0.01f * S), ht, pal.primary);
+        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.03f * S, x_te_tip - 0.01f * S, zt - 0.02f * S, sg * (b + 0.004f * S), ht, pal.primary);
+        break;
+      case kWCant:  // angled, canted outward
+        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.035f * S, x_te_tip - 0.015f * S, zt + 0.04f * S, sg * (b + 0.025f * S), ht, pal.primary);
+        break;
+      case kWNone: break;
     }
   }
 
@@ -251,7 +382,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   else hf = D >= 5.0f ? 0.12f * L : 0.145f * L;
   const float fin_le = -h + 0.16f * L, fin_te = -h + 0.01f * L;
   const float fin_tip_le = fin_le - 0.55f * hf, fin_tip_te = fin_tip_le - 0.07f * L;
-  addVertical(fin_le, fin_te, 0.55f * R, fin_tip_le, fin_tip_te, R + hf, 0, 0.04f * D, pal.primary);
+  addPatternFin(fin_le, fin_te, 0.55f * R, fin_tip_le, fin_tip_te, R + hf, 0.04f * D, pal);
   {
     const bool straight = s.sweep_deg < 1.0f;
     const float ts = 0.36f * s.span, tcr = (straight ? 0.25f : 0.32f) * ts,
@@ -262,6 +393,31 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
     for (int sg = -1; sg <= 1; sg += 2) {
       addHorizontal(static_cast<float>(sg), 0.3f * R, ts / 2, le, te, tip_le, tip_le - tct, zt, zt,
                     0.03f * D, 0.02f * D, pal.hull);
+    }
+  }
+  // --- Windows and doors (overlays on both sides). ---
+  if (windows) {
+    const int N = static_cast<int>(fminf(26.0f, fmaxf(8.0f, roundf(L * 0.5f))));  // scaled to the real count
+    const float xs = h - nc * 1.05f, xe = -h + tc * 0.95f, pitch = (xs - xe) / N, ww = 0.55f * pitch;
+    const float zc = 0.22f * R, hh = 0.09f * R, yw = sqrtf(R * R - zc * zc);
+    const Rgb doorc = {static_cast<uint8_t>(pal.belly.r * 0.88f), static_cast<uint8_t>(pal.belly.g * 0.88f),
+                       static_cast<uint8_t>(pal.belly.b * 0.9f)};
+    for (int sg = -1; sg <= 1; sg += 2) {
+      for (int k = 0; k < N; ++k) {
+        const float xk = xs - pitch * (static_cast<float>(k) + 0.5f);
+        addOverlay(xk - ww / 2, xk + ww / 2, zc - hh, zc + hh, sg * yw * 1.004f, sg, window);
+      }
+      // Doors: front and rear; wide-bodies and the A321 family also have two more by the wing.
+      const bool four = D >= 5.0f || hasPrefix(type, "A321") || hasPrefix(type, "A21N");
+      const float dw = 0.30f * R, y_d = sg * 0.95f * R;
+      float dx[4] = {xs + 0.045f * L, xe - 0.035f * L, x_le + 0.06f * L, x_te - 0.05f * L};
+      for (int d = 0; d < (four ? 4 : 2); ++d) addOverlay(dx[d] - dw / 2, dx[d] + dw / 2, -0.10f * R, 0.52f * R, y_d, sg, doorc);
+      if (!four && s.mount == Mount::UnderWing) {  // over-wing exits
+        for (int e = 0; e < 2; ++e) {
+          const float ex = x_le - (0.35f + 0.28f * static_cast<float>(e)) * s.root_chord;
+          addOverlay(ex - 0.07f * R, ex + 0.07f * R, 0.14f * R, 0.46f * R, y_d, sg, doorc);
+        }
+      }
     }
   }
   return gMesh;
@@ -275,7 +431,7 @@ size_t projectMesh(const Mesh& m, bool facing_right, int cx, int cy, int box_w, 
   float* buf = static_cast<float*>(malloc(5 * m.nv * sizeof(float)));
   if (buf == nullptr) return 0;
   float *vx = buf, *vy = buf + m.nv, *wx = buf + 2 * m.nv, *wy = buf + 3 * m.nv, *vd = buf + 4 * m.nv;
-  const float yaw = rad(-35.0f), pitch = rad(18.0f);
+  const float yaw = rad(-40.0f), pitch = rad(18.0f);
   const float cyw = cosf(yaw), syw = sinf(yaw), cp = cosf(pitch), sp = sinf(pitch);
   const float extent = fmaxf(m.length, 1.0f), dist = 3.0f * extent;
   float minx = 1e9f, maxx = -1e9f, miny = 1e9f, maxy = -1e9f;
@@ -299,44 +455,57 @@ size_t projectMesh(const Mesh& m, bool facing_right, int cx, int cy, int box_w, 
   if (frac > 1.0f) frac = 1.0f;
   const float bw = fmaxf(maxx - minx, 0.01f), bh = fmaxf(maxy - miny, 0.01f);
   const float scale = fminf(static_cast<float>(box_w) / bw, static_cast<float>(box_h) / bh) *
-                      (0.62f + 0.38f * frac);
+                      (0.78f + 0.22f * frac);
   const float mx = (minx + maxx) / 2, my = (miny + maxy) / 2;
 
   size_t n = 0;
   // Light from the upper left, towards the camera (view space: x right, y up, d away).
   const float lx = -0.45f, ly = 0.80f, ld = -0.40f;
   const float ll = sqrtf(lx * lx + ly * ly + ld * ld);
-  for (size_t i = 0; i < m.nt && n < cap; ++i) {
-    const Tri& t = m.t[i];
-    const float ax = wx[t.b] - wx[t.a], ay = wy[t.b] - wy[t.a], ad = vd[t.b] - vd[t.a];
-    const float bx = wx[t.c] - wx[t.a], by = wy[t.c] - wy[t.a], bd = vd[t.c] - vd[t.a];
-    float nx = ay * bd - ad * by, ny = ad * bx - ax * bd, nd = ax * by - ay * bx;
-    const float nl = sqrtf(nx * nx + ny * ny + nd * nd);
-    if (nl < 1e-6f) continue;  // degenerate
-    if (nd > 0) {              // face the camera
-      nx = -nx;
-      ny = -ny;
-      nd = -nd;
+  size_t n_base = 0;
+  for (int pass = 0; pass < 2; ++pass) {  // pass 0: body, pass 1: overlays (windows, doors)
+    if (pass == 1) n_base = n;
+    for (size_t i = 0; i < m.nt && n < cap; ++i) {
+      const Tri& t = m.t[i];
+      const bool overlay = t.ox != 0 || t.oy != 0 || t.oz != 0;
+      if (overlay != (pass == 1)) continue;
+      if (overlay) {  // skip overlays on the far side of the fuselage
+        const float ox = t.ox, oy = t.oy, oz = t.oz;
+        const float y1 = ox * syw + oy * cyw;
+        if (y1 * cp - oz * sp >= 0.0f) continue;
+      }
+      const float ax = wx[t.b] - wx[t.a], ay = wy[t.b] - wy[t.a], ad = vd[t.b] - vd[t.a];
+      const float bx = wx[t.c] - wx[t.a], by = wy[t.c] - wy[t.a], bd = vd[t.c] - vd[t.a];
+      float nx = ay * bd - ad * by, ny = ad * bx - ax * bd, nd = ax * by - ay * bx;
+      const float nl = sqrtf(nx * nx + ny * ny + nd * nd);
+      if (nl < 1e-6f) continue;  // degenerate
+      if (nd > 0) {              // face the camera
+        nx = -nx;
+        ny = -ny;
+        nd = -nd;
+      }
+      const float lam = fmaxf(0.0f, (nx * lx + ny * ly + nd * ld) / (nl * ll));
+      const float shade = 0.62f + 0.45f * lam;
+      ScreenTri& o = out[n];
+      const uint16_t vi[3] = {t.a, t.b, t.c};
+      for (int k = 0; k < 3; ++k) {
+        o.x[k] = static_cast<int16_t>(lroundf(static_cast<float>(cx) + (vx[vi[k]] - mx) * scale));
+        o.y[k] = static_cast<int16_t>(lroundf(static_cast<float>(cy) - (vy[vi[k]] - my) * scale));
+      }
+      auto sh = [&](uint8_t c) {
+        const float v = c * shade;
+        return static_cast<uint8_t>(v > 255.0f ? 255.0f : v);
+      };
+      o.color = {sh(t.color.r), sh(t.color.g), sh(t.color.b)};
+      o.depth = (vd[t.a] + vd[t.b] + vd[t.c]) / 3.0f;
+      ++n;
     }
-    const float lam = fmaxf(0.0f, (nx * lx + ny * ly + nd * ld) / (nl * ll));
-    const float shade = 0.62f + 0.45f * lam;
-    ScreenTri& o = out[n];
-    const uint16_t vi[3] = {t.a, t.b, t.c};
-    for (int k = 0; k < 3; ++k) {
-      o.x[k] = static_cast<int16_t>(lroundf(static_cast<float>(cx) + (vx[vi[k]] - mx) * scale));
-      o.y[k] = static_cast<int16_t>(lroundf(static_cast<float>(cy) - (vy[vi[k]] - my) * scale));
-    }
-    auto sh = [&](uint8_t c) {
-      const float v = c * shade;
-      return static_cast<uint8_t>(v > 255.0f ? 255.0f : v);
-    };
-    o.color = {sh(t.color.r), sh(t.color.g), sh(t.color.b)};
-    o.depth = (vd[t.a] + vd[t.b] + vd[t.c]) / 3.0f;
-    ++n;
   }
   free(buf);
-  // Far to near (painter's algorithm).
-  std::sort(out, out + n, [](const ScreenTri& a, const ScreenTri& b) { return a.depth > b.depth; });
+  // Far to near (painter's algorithm): body first, then the overlays on top of it.
+  auto far_first = [](const ScreenTri& a, const ScreenTri& b) { return a.depth > b.depth; };
+  std::sort(out, out + n_base, far_first);
+  std::sort(out + n_base, out + n, far_first);
   return n;
 }
 

@@ -103,8 +103,9 @@ int main() {
   }
   // 3D models: every spec (and the class fallbacks) builds within the mesh limits, with valid
   // indices and finite coordinates, and projects inside its box, sorted far to near.
-  const jf::Palette pal = {{252, 250, 242}, {222, 222, 228}, {200, 20, 40}, {40, 40, 40},
-                           {150, 190, 220}, {44, 32, 22}};
+  jf::Palette pal = {{252, 250, 242}, {222, 222, 228}, {200, 20, 40}, {40, 40, 40},
+                     {150, 190, 220}, {44, 32, 22},    {255, 255, 255}, {205, 205, 210},
+                     {200, 20, 40},   0,               jf::kTailDisc, jf::kBodyCheat};
   static jf::ScreenTri tris[jf::kMaxTris];
   size_t checked = 0;
   auto checkType = [&](const char* ty) {
@@ -116,24 +117,42 @@ int main() {
     for (size_t i = 0; i < m.nt; ++i) CHECK(m.t[i].a < m.nv && m.t[i].b < m.nv && m.t[i].c < m.nv);
     for (int right = 0; right < 2; ++right) {
       const size_t n = jf::projectMesh(m, right != 0, 100, 100, 150, 120, tris, jf::kMaxTris);
+      int ascents = 0;
       CHECK(n > m.nt / 2);
       for (size_t i = 0; i < n; ++i) {
         for (int k = 0; k < 3; ++k) {
           CHECK(tris[i].x[k] >= 100 - 76 && tris[i].x[k] <= 100 + 76);   // inside the box (+1px)
           CHECK(tris[i].y[k] >= 100 - 61 && tris[i].y[k] <= 100 + 61);
         }
-        if (i > 0) CHECK(tris[i - 1].depth >= tris[i].depth);
+        if (i > 0 && tris[i - 1].depth < tris[i].depth) ++ascents;
       }
+      CHECK(ascents <= 1);  // far-to-near in two runs: the body, then the window/door overlays
     }
     ++checked;
   };
   for (size_t i = 0; i < jf::specCount(); ++i) checkType(jf::specAt(i).prefix);
+  for (int tail = jf::kTailBand; tail <= jf::kTailDiagSplit; ++tail) {  // every livery design builds
+    for (int body = jf::kBodyCheat; body <= jf::kBodyFull; ++body) {
+      pal.tail = static_cast<uint8_t>(tail);
+      pal.body = static_cast<uint8_t>(body);
+      checkType("A320");
+    }
+  }
+  pal.tail = jf::kTailDisc;
+  pal.body = jf::kBodyCheat;
   for (const char* ty : {"", "ZZZZ", "EC35", "C172", "GLF5", "AT76", "CRJ9"}) checkType(ty);
-  CHECK(checked == jf::specCount() + 7);
+  CHECK(checked == jf::specCount() + 7 + 27);
   // Types look different from each other.
   CHECK(jf::specFor("A319").length < jf::specFor("A320").length);
   CHECK(jf::specFor("A320").length < jf::specFor("A321").length);
   CHECK(jf::specFor("A388").engines == 4 && jf::specFor("B744").engines == 4);
+  CHECK(jf::specFor("B722").engines == 3 && jf::specFor("B722").mount == jf::Mount::Rear);
+  CHECK(jf::specFor("B712").length < 40.0f && jf::specFor("B703").engines == 4);
+  CHECK(jf::specFor("A225").engines == 6 && jf::specFor("A124").engines == 4);
+  CHECK(jf::specFor("A388").deck == 2 && jf::specFor("B744").deck == 1 && jf::specFor("A320").deck == 0);
+  CHECK(jf::liveryFor(jf::airlineFor("ACA1234")).fin_base == jf::kFinSecondary);
+  CHECK(jf::liveryFor(jf::airlineFor("NSZ1234")).nose_red == 1);
+  CHECK(jf::liveryFor(jf::airlineFor("QTR1234")).hull == jf::kHullPearl);
   CHECK(jf::specFor("A320").engines == 2);
   CHECK(jf::specFor("CRJ9").mount == jf::Mount::Rear);
   CHECK(jf::specFor("AT76").mount == jf::Mount::Prop);
@@ -157,6 +176,14 @@ int main() {
       CHECK(strcmp(jf::airlineAt(i).icao, jf::airlineAt(j).icao) != 0);
   }
   CHECK(jf::airlineFor("AEE7PT") != nullptr);
+  for (size_t i = 0; i < jf::liveryCount(); ++i) {  // every livery row names a known airline
+    char cs[8];
+    snprintf(cs, sizeof cs, "%s1", jf::liveryCode(i));
+    CHECK(jf::airlineFor(cs) != nullptr);
+  }
+  CHECK(jf::liveryFor(jf::airlineFor("SWR123")).tail == jf::kTailCross);
+  CHECK(jf::liveryFor(jf::airlineFor("JST446")).body == jf::kBodyBelly);
+  CHECK(jf::liveryFor(nullptr).tail == jf::kTailBand);
   CHECK(jf::looksLikeAirlineCallsign("QQQ123") && !jf::looksLikeAirlineCallsign("CS-DXX"));
 
   if (failures == 0) printf("all firmware host tests passed\n");

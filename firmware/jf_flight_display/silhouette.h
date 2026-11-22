@@ -23,9 +23,10 @@ struct AircraftSpec {
   float tip_chord;
   float fuselage_w;
   float wing_pos;     // wing root leading edge as a fraction of length from the nose
-  int engines;        // 0 (none drawn / nose engine), 2 or 4
+  int engines;        // 0 (none drawn / nose engine), 2, 3 (rear tri-jet), 4 or 6
   Mount mount;
   float nacelle_w;
+  int deck;           // 0 normal, 1 upper-deck hump (747), 2 full double deck (A380)
 };
 
 // Best spec for a type; falls back to a representative spec for its Category.

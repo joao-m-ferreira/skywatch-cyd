@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "livery.h"
 namespace jf {
 
 struct Rgb {
@@ -14,10 +15,16 @@ struct Rgb {
 // Livery colours baked into the mesh.
 struct Palette {
   Rgb hull, belly, primary, secondary, glass, dark;
+  Rgb motif;        // tail emblem colour
+  Rgb engine;       // engine cowling colour
+  Rgb fin;          // fin base colour
+  uint8_t nose_red; // 1 = nose cone in the primary colour
+  uint8_t tail;     // jf::Tail
+  uint8_t body;     // jf::Body
 };
 
-constexpr size_t kMaxVerts = 480;  // largest mesh in the table is 420
-constexpr size_t kMaxTris = 800;    // ... and 732
+constexpr size_t kMaxVerts = 1000;
+constexpr size_t kMaxTris = 1300;
 
 struct Vertex {
   float x, y, z;  // x forward (nose +x), y to the right wing, z up; metres
@@ -25,6 +32,9 @@ struct Vertex {
 struct Tri {
   uint16_t a, b, c;
   Rgb color;
+  // Overlay (window, door): lies on the fuselage; drawn after the body and only when its
+  // outward direction (ox, oy, oz) faces the camera. 0,0,0 for ordinary triangles.
+  int8_t ox, oy, oz;
 };
 struct Mesh {
   Vertex v[kMaxVerts];

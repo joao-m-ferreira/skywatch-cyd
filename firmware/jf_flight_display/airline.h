@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 
+#include "livery.h"
 namespace jf {
 
 struct Airline {
@@ -16,8 +17,13 @@ struct Airline {
 // Looks up the airline for a callsign like "RYR8XY" (3 letters, then a digit).
 // Returns nullptr for registrations ("CS-DXX"), unknown operators, or null input.
 const Airline* airlineFor(const char* callsign);
+// Livery design for an airline (defaults for those without a specific design).
+Livery liveryFor(const Airline* airline);
 // True for "ABC123"-style callsigns (3 letters + digit): an operator code we may not know.
 bool looksLikeAirlineCallsign(const char* callsign);
+// The livery table (for tests).
+size_t liveryCount();
+const char* liveryCode(size_t i);
 // The table itself (for tests).
 size_t airlineCount();
 const Airline& airlineAt(size_t i);
