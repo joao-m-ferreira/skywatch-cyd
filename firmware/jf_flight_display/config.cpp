@@ -54,10 +54,13 @@ const char kHelp[] =
     "  set night <from> <to>  screen off between these hours, e.g. set night 23 7\n"
     "  set night off|on       disable / enable night mode\n"
     "  set wake <minutes>     how long a touch wakes the screen at night, 1..120 (default 10)\n"
-    "  set panel ili9341|st7789  display controller (two-USB CYD boards are ST7789); restarts\n"
+    "  set panel ili9341|st7789|st7796|ili9488  display controller (two-USB CYD: st7789; 3.5in: st7796/ili9488); restarts\n"
+    "  set backlight <gpio>   backlight pin (21 on 2.8in boards, 27 on 3.5in); restarts\n"
+    "  set touch separate|shared  touch on its own SPI bus (2.8in) or the display's (3.5in); restarts\n"
     "  set invert on|off      colour inversion (colours look negative: toggle it); restarts\n"
     "  set rgb normal|swap    swap red and blue (red looks blue: use swap); restarts\n"
-    "  set rotation 1|3       3 = upside down; restarts\n"
+    "  set rotation 0..3      1 landscape, 3 upside down, 0 / 2 portrait; restarts\n"
+    "  set layout auto|side|flip|stacked  plane left / plane right / plane on top (auto by shape)\n"
     "  set led <0..100>       RGB LED brightness percent (lower it if the board resets on weak USB)\n"
     "  display test           colour test card to identify your panel variant\n"
     "  safe on|off            force / leave safe mode (no photos or 3D model; used after repeated crashes)\n"
@@ -84,9 +87,12 @@ void configDefaults(Config* c, const char* ssid, const char* pass, double lat, d
   c->auto_loc = true;
   c->tz_set = false;
   c->panel = 0;
+  c->bl_pin = 21;
+  c->touch_shared = false;
   c->invert = false;
   c->rgb_swap = false;
   c->rotation = 1;
+  c->layout = 0;
   c->led_pct = 100;
 }
 
@@ -162,12 +168,14 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
     snprintf(reply, n,
              "ssid     %s\npass     %s\nlocation %s\nlat      %.5f\nlon      %.5f\nradius   %d km\n"
              "contact  %s\nnight    %s (%02d:00 - %02d:00)\nwake     %d min (touch at night)\ntz       %s\n"
-             "display  %s, invert %s, rgb %s, rotation %d, led %d%%\n",
+             "display  %s, invert %s, rgb %s, rotation %d, layout %s, led %d%%, backlight GPIO %d, touch %s\n",
              c->ssid[0] ? c->ssid : "(not set)", c->pass[0] ? "****" : "(empty)",
              c->auto_loc ? "auto (geojs.io, from your public IP)" : "static", c->lat, c->lon,
              c->radius_km, c->contact, c->night_on ? "on" : "off", c->night_start, c->night_end,
-             c->wake_min, c->tz, c->panel == 1 ? "ST7789" : "ILI9341", c->invert ? "on" : "off",
-             c->rgb_swap ? "swap" : "normal", c->rotation, c->led_pct);
+             c->wake_min, c->tz, c->panel == 1 ? "ST7789" : c->panel == 2 ? "ST7796" : c->panel == 3 ? "ILI9488" : "ILI9341", c->invert ? "on" : "off",
+             c->rgb_swap ? "swap" : "normal", c->rotation,
+             c->layout == 1 ? "side" : c->layout == 2 ? "flip" : c->layout == 3 ? "stacked" : "auto", c->led_pct, c->bl_pin,
+             c->touch_shared ? "shared bus" : "own bus");
     return CmdAction::None;
   }
   if (strcasecmp(p, "reboot") == 0) {
@@ -192,7 +200,7 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
 
   double d;
   int a, b;
-  bool display_change = false;
+  bool display_change = false, redraw_only = false;
   if (strcasecmp(key, "ssid") == 0) {
     if (*value == '\0' || strlen(value) > 32) {
       snprintf(reply, n, "error: ssid must be 1..32 characters\n");
@@ -284,8 +292,10 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
   } else if (strcasecmp(key, "panel") == 0) {
     if (strcasecmp(value, "ili9341") == 0) c->panel = 0;
     else if (strcasecmp(value, "st7789") == 0) c->panel = 1;
+    else if (strcasecmp(value, "st7796") == 0) c->panel = 2;
+    else if (strcasecmp(value, "ili9488") == 0) c->panel = 3;
     else {
-      snprintf(reply, n, "error: panel is ili9341 or st7789\n");
+      snprintf(reply, n, "error: panel is ili9341, st7789, st7796 or ili9488\n");
       return CmdAction::None;
     }
     display_change = true;
@@ -306,12 +316,37 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
     }
     display_change = true;
   } else if (strcasecmp(key, "rotation") == 0) {
-    if (!parseInt(value, 1, 3, &a) || a == 2) {
-      snprintf(reply, n, "error: rotation is 1 or 3\n");
+    if (!parseInt(value, 0, 3, &a)) {
+      snprintf(reply, n, "error: rotation is 0, 1, 2 or 3\n");
       return CmdAction::None;
     }
     c->rotation = a;
     display_change = true;
+  } else if (strcasecmp(key, "backlight") == 0) {
+    if (!parseInt(value, 0, 39, &a)) {
+      snprintf(reply, n, "error: backlight is a GPIO number 0..39\n");
+      return CmdAction::None;
+    }
+    c->bl_pin = a;
+    display_change = true;
+  } else if (strcasecmp(key, "touch") == 0) {
+    if (strcasecmp(value, "shared") == 0) c->touch_shared = true;
+    else if (strcasecmp(value, "separate") == 0) c->touch_shared = false;
+    else {
+      snprintf(reply, n, "error: touch is separate or shared\n");
+      return CmdAction::None;
+    }
+    display_change = true;
+  } else if (strcasecmp(key, "layout") == 0) {
+    if (strcasecmp(value, "auto") == 0) c->layout = 0;
+    else if (strcasecmp(value, "side") == 0) c->layout = 1;
+    else if (strcasecmp(value, "flip") == 0) c->layout = 2;
+    else if (strcasecmp(value, "stacked") == 0) c->layout = 3;
+    else {
+      snprintf(reply, n, "error: layout is auto, side, flip or stacked\n");
+      return CmdAction::None;
+    }
+    redraw_only = true;
   } else if (strcasecmp(key, "led") == 0) {
     if (!parseInt(value, 0, 100, &a)) {
       snprintf(reply, n, "error: led is a percent from 0 to 100\n");
@@ -329,7 +364,7 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
     return CmdAction::None;
   }
   snprintf(reply, n, display_change ? "ok, saved (%s); restarting to apply\n" : "ok, saved (%s)\n", key);
-  return display_change ? CmdAction::Display : CmdAction::Changed;
+  return display_change ? CmdAction::Display : redraw_only ? CmdAction::Redraw : CmdAction::Changed;
 }
 
 }  // namespace jf

@@ -78,7 +78,9 @@ Settings are saved in the board's flash. The build-time defaults come from `secr
 | `set contact <email>` | contact sent to planespotters.net (required by their API) |
 | `set night <from> <to>` / `set night off` | screen off between these hours, e.g. `set night 23 7` |
 | `set tz <posix tz>` | clock timezone (found from your location when auto) |
-| `set panel ili9341\|st7789` / `set invert on\|off` / `set rgb normal\|swap` / `set rotation 1\|3` | board variant: panel, colour inversion, red/blue order, upside-down (restarts to apply) |
+| `set panel ili9341\|st7789\|st7796\|ili9488` / `set invert on\|off` / `set rgb normal\|swap` / `set rotation 0..3` | board variant: panel, colour inversion, red/blue order, orientation (restarts to apply) |
+| `set backlight <gpio>` / `set touch separate\|shared` | 3.5" boards: backlight pin (27) and touch on the display's SPI bus (restarts to apply) |
+| `set layout auto\|side\|flip\|stacked` | plane left / plane right / plane on top, text below (auto by panel shape) |
 | `display test` | colour test card for 15 s, to identify your panel variant |
 | `set led <0..100>` | RGB LED brightness percent |
 | `safe on\|off` | force / leave safe mode |
@@ -97,8 +99,23 @@ compare the bars with red, green, blue, white, black, yellow, cyan, magenta:
 | upside down | `set rotation 3` |
 | white or garbled screen, two USB ports (micro + USB-C) | `set panel st7789`, then `set invert on` if needed |
 
-The board restarts to apply each display setting and remembers it. Boards with capacitive touch or
-other screen sizes use different pins and are not supported.
+The board restarts to apply each display setting and remembers it.
+
+**Layouts.** The plate adapts to the panel: the canvas always fills the screen (nothing is
+letterboxed) and `set layout` chooses how it is arranged:
+
+| Layout | Plane | Text | Default for |
+|---|---|---|---|
+| `side` | left | right | landscape panels (320x240, 480x320, ...) |
+| `flip` | right | left | |
+| `stacked` | on top | below | portrait and square panels (`set rotation 0`, 480x480, ...) |
+
+A layout the panel's shape cannot hold falls back (for example `stacked` on a wide panel).
+
+**Bigger "CYD" boards (3.5", 480x320) are experimental.** `set panel st7796` (or `ili9488`),
+`set backlight 27` and `set touch shared` select what those boards use; the pins are the common ones
+for ESP32-3248S035-style boards and have not been verified on hardware here. Capacitive touch
+(GT911/FT6x36 on I2C), ESP32-S3 / P4 boards and RGB-parallel or QSPI panels are not supported.
 
 `status` shows why the board last restarted (power on, software, panic, watchdog, **brownout**), the
 largest free block of memory and the number of crashes in a row. A **brownout** usually means a weak

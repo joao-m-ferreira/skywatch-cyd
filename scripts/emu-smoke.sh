@@ -4,7 +4,8 @@
 # and checks the console: it must fetch aircraft over HTTPS, draw, stay within time and memory budgets and
 # never panic or reboot. No hardware needed. Needs the internet (adsb.fi and friends are reached for real).
 #
-#   scripts/emu-smoke.sh [seconds]      (default 60 emulated seconds, about 10 s of wall time)
+#   scripts/emu-smoke.sh [seconds] [portrait]   (default 60 emulated seconds, about 10 s of wall time;
+#                                                "portrait" builds with rotation 0: the stacked layout on 240x320)
 #
 # Writes build/emu/run.log and build/emu/tft.png (the emulated screen, flipped upright). Real credentials are
 # never used: the firmware is built from a temp copy with a placeholder WiFi network.
@@ -15,6 +16,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 SECS="${1:-60}"
+MODE="${2:-landscape}"
 VER=0.4.0
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64) PLAT=macos-arm64;  SHA=d9755dd8ab5ae29dba05df77162428ea9d67512d05db77330c1ad87ddac3a6ef ;;
@@ -52,6 +54,7 @@ cat > "$D/fw/jf_flight_display/secrets.h" <<'EOF'
 #define PLANESPOTTERS_CONTACT "emulator@example.invalid"
 EOF
 printf '#pragma once\n#define SKYWATCH_VERSION "emu"\n' > "$D/fw/jf_flight_display/version.h"
+[ "$MODE" = portrait ] && sed -i.bak 's/c->rotation = 1;/c->rotation = 0;/' "$D/fw/jf_flight_display/config.cpp"
 arduino-cli compile --fqbn esp32:esp32:esp32:PartitionScheme=huge_app "$D/fw/jf_flight_display" \
   --build-path "$D/out" --export-binaries >/dev/null
 F="$D/out/jf_flight_display.ino"

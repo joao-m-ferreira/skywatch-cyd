@@ -19,14 +19,17 @@ struct Config {
   bool auto_loc;     // true: work out the location from the public IP (until lat/lon are set)
   bool tz_set;       // true once the user chose a timezone (never overridden by geo-IP)
   // Board variant (the "CYD" is sold with several panels). Changing these restarts the board.
-  int panel;         // 0 = ILI9341 (the single-USB ESP32-2432S028R), 1 = ST7789 (two-USB variant)
+  int panel;         // 0 ILI9341 (single-USB ESP32-2432S028R), 1 ST7789 (two-USB), 2 ST7796 / 3 ILI9488 (3.5" 480x320, experimental)
+  int bl_pin;        // backlight GPIO (21 on the 2.8" boards, 27 on the 3.5" ones)
+  bool touch_shared; // XPT2046 on the display's SPI bus (3.5" boards) instead of its own
   bool invert;       // colour inversion (some panels need it)
   bool rgb_swap;     // swap red and blue
-  int rotation;      // 1 or 3 (3 = upside down)
+  int rotation;      // 0..3: 1 landscape, 3 landscape upside down, 0 / 2 portrait
+  int layout;        // jf::LayoutMode: 0 auto, 1 plane left, 2 plane right, 3 plane on top
   int led_pct;       // RGB LED brightness 0..100 (lower it if a weak USB port browns out)
 };
 
-enum class CmdAction { None, Changed, Display, Reboot, Factory };  // Display: saved, then restart to apply
+enum class CmdAction { None, Changed, Display, Redraw, Reboot, Factory };  // Display: saved, then restart; Redraw: saved, redraw now
 
 constexpr const char* kDefaultTz = "WET0WEST,M3.5.0/1,M10.5.0";  // Lisbon
 

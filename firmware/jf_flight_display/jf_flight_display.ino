@@ -100,9 +100,12 @@ void loadConfig() {
   cfg.auto_loc = prefs.getBool("aloc", cfg.auto_loc);
   cfg.tz_set = prefs.getBool("tzset", cfg.tz_set);
   cfg.panel = prefs.getInt("panel", cfg.panel);
+  cfg.bl_pin = prefs.getInt("blpin", cfg.bl_pin);
+  cfg.touch_shared = prefs.getBool("tshared", cfg.touch_shared);
   cfg.invert = prefs.getBool("invert", cfg.invert);
   cfg.rgb_swap = prefs.getBool("rgbswap", cfg.rgb_swap);
   cfg.rotation = prefs.getInt("rot", cfg.rotation);
+  cfg.layout = prefs.getInt("layout", cfg.layout);
   cfg.led_pct = prefs.getInt("led", cfg.led_pct);
   prefs.end();
 }
@@ -123,9 +126,12 @@ void saveConfig() {
   prefs.putBool("aloc", cfg.auto_loc);
   prefs.putBool("tzset", cfg.tz_set);
   prefs.putInt("panel", cfg.panel);
+  prefs.putInt("blpin", cfg.bl_pin);
+  prefs.putBool("tshared", cfg.touch_shared);
   prefs.putBool("invert", cfg.invert);
   prefs.putBool("rgbswap", cfg.rgb_swap);
   prefs.putInt("rot", cfg.rotation);
+  prefs.putInt("layout", cfg.layout);
   prefs.putInt("led", cfg.led_pct);
   prefs.end();
 }
@@ -394,13 +400,13 @@ void drawScreen() {
     right[0] = '\0';
     ledForPlane(nullptr);
     drawPlateMessage(tft, fetchFailed ? "Fetch failed" : "No aircraft in range",
-                     fetchFailed ? lastError : "", left, right, fetchFailed);
+                     fetchFailed ? lastError : "", left, right, fetchFailed, cfg.layout);
     return;
   }
   if (selected >= flightCount) selected = 0;
   ledForPlane(&flights[selected]);
   drawPlate(tft, flights[selected], selected, flightCount, left, right,
-            safeMode ? nullptr : jf::photoFor(flights[selected].reg), safeMode);
+            safeMode ? nullptr : jf::photoFor(flights[selected].reg), safeMode, cfg.layout);
 }
 
 void updateBacklight() {
@@ -512,7 +518,7 @@ void handleLine(const char* line) {
     Serial.println("night test: screen and LED off for 20 s (touch the screen to wake it for the 'wake' time)");
     return;
   }
-  static char reply[1800];
+  static char reply[3000];  // the help text is the longest answer
   const jf::CmdAction action = jf::configCommand(&cfg, line, reply, sizeof reply);
   Serial.print(reply);
   switch (action) {
@@ -520,6 +526,10 @@ void handleLine(const char* line) {
       saveConfig();
       jf::photoSetContact(cfg.contact);
       netRestart = true;  // pick the new settings up
+      break;
+    case jf::CmdAction::Redraw:  // layout changed: no restart needed
+      saveConfig();
+      forceRedraw = true;
       break;
     case jf::CmdAction::Display:  // panel variant changed: it only applies at start-up
       saveConfig();
@@ -628,7 +638,7 @@ void setup() {
   const bool forcedSafe = prefs.getBool("safe", false);
   prefs.end();
   safeMode = forcedSafe || jf::configSafeMode(crashCount);
-  tft.useVariant(cfg.panel, cfg.invert, cfg.rgb_swap);
+  tft.useVariant(cfg.panel, cfg.invert, cfg.rgb_swap, cfg.bl_pin, cfg.touch_shared);
   tft.init();
   tft.setRotation(cfg.rotation);  // 320x240 landscape (3 = upside down)
   setupLed();

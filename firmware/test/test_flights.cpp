@@ -6,6 +6,7 @@
 #include "../jf_flight_display/airline.h"
 #include "../jf_flight_display/config.h"
 #include "../jf_flight_display/flights.h"
+#include "../jf_flight_display/layout.h"
 #include "../jf_flight_display/model3d.h"
 #include "../jf_flight_display/silhouette.h"
 
@@ -281,23 +282,41 @@ int main() {
     CHECK(jf::configCommand(&c, "set panel st7789", r, sizeof r) == jf::CmdAction::Display && c.panel == 1);
     CHECK(jf::configCommand(&c, "set panel ili9341", r, sizeof r) == jf::CmdAction::Display && c.panel == 0);
     CHECK(jf::configCommand(&c, "set panel hx8357", r, sizeof r) == jf::CmdAction::None && c.panel == 0);
+    CHECK(jf::configCommand(&c, "set panel st7796", r, sizeof r) == jf::CmdAction::Display && c.panel == 2);
+    CHECK(jf::configCommand(&c, "set panel ili9488", r, sizeof r) == jf::CmdAction::Display && c.panel == 3);
+    jf::configCommand(&c, "set panel ili9341", r, sizeof r);
+    CHECK(c.bl_pin == 21 && !c.touch_shared);
+    CHECK(jf::configCommand(&c, "set backlight 27", r, sizeof r) == jf::CmdAction::Display && c.bl_pin == 27);
+    CHECK(jf::configCommand(&c, "set backlight 40", r, sizeof r) == jf::CmdAction::None && c.bl_pin == 27);
+    CHECK(jf::configCommand(&c, "set touch shared", r, sizeof r) == jf::CmdAction::Display && c.touch_shared);
+    CHECK(jf::configCommand(&c, "set touch wireless", r, sizeof r) == jf::CmdAction::None && c.touch_shared);
+    jf::configCommand(&c, "set backlight 21", r, sizeof r);
+    jf::configCommand(&c, "set touch separate", r, sizeof r);
     CHECK(jf::configCommand(&c, "set invert on", r, sizeof r) == jf::CmdAction::Display && c.invert);
     CHECK(jf::configCommand(&c, "set invert maybe", r, sizeof r) == jf::CmdAction::None && c.invert);
     CHECK(jf::configCommand(&c, "set rgb swap", r, sizeof r) == jf::CmdAction::Display && c.rgb_swap);
     CHECK(jf::configCommand(&c, "set rgb normal", r, sizeof r) == jf::CmdAction::Display && !c.rgb_swap);
     CHECK(jf::configCommand(&c, "set rotation 3", r, sizeof r) == jf::CmdAction::Display && c.rotation == 3);
-    CHECK(jf::configCommand(&c, "set rotation 2", r, sizeof r) == jf::CmdAction::None && c.rotation == 3);
-    CHECK(jf::configCommand(&c, "set rotation 0", r, sizeof r) == jf::CmdAction::None);
+    CHECK(jf::configCommand(&c, "set rotation 0", r, sizeof r) == jf::CmdAction::Display && c.rotation == 0);  // portrait
+    CHECK(jf::configCommand(&c, "set rotation 4", r, sizeof r) == jf::CmdAction::None && c.rotation == 0);
+    CHECK(jf::configCommand(&c, "set rotation x", r, sizeof r) == jf::CmdAction::None);
+    jf::configCommand(&c, "set rotation 3", r, sizeof r);
+    CHECK(c.layout == 0);
+    CHECK(jf::configCommand(&c, "set layout stacked", r, sizeof r) == jf::CmdAction::Redraw && c.layout == 3);
+    CHECK(jf::configCommand(&c, "set layout flip", r, sizeof r) == jf::CmdAction::Redraw && c.layout == 2);
+    CHECK(jf::configCommand(&c, "set layout side", r, sizeof r) == jf::CmdAction::Redraw && c.layout == 1);
+    CHECK(jf::configCommand(&c, "set layout auto", r, sizeof r) == jf::CmdAction::Redraw && c.layout == 0);
+    CHECK(jf::configCommand(&c, "set layout diagonal", r, sizeof r) == jf::CmdAction::None && c.layout == 0);
     CHECK(jf::configCommand(&c, "set led 40", r, sizeof r) == jf::CmdAction::Changed && c.led_pct == 40);
     CHECK(jf::configCommand(&c, "set led 101", r, sizeof r) == jf::CmdAction::None && c.led_pct == 40);
     CHECK(jf::configCommand(&c, "set led -1", r, sizeof r) == jf::CmdAction::None && c.led_pct == 40);
     jf::configCommand(&c, "show", r, sizeof r);
     CHECK(strstr(r, "ILI9341") != nullptr && strstr(r, "rotation 3") != nullptr && strstr(r, "led 40%") != nullptr);
     CHECK(!jf::configSafeMode(0) && !jf::configSafeMode(2) && jf::configSafeMode(3) && jf::configSafeMode(9));
-    {  // the whole help text must fit the console reply buffer of the firmware (1800 bytes) untruncated
-      char big[1800];
+    {  // the whole help text must fit the console reply buffer of the firmware (3000 bytes), with room to spare
+      char big[3000];
       CHECK(jf::configCommand(&c, "help", big, sizeof big) == jf::CmdAction::None);
-      CHECK(strstr(big, "factory") != nullptr && strlen(big) < sizeof big - 1);
+      CHECK(strstr(big, "factory") != nullptr && strlen(big) < 2600);
     }
     CHECK(jf::configCommand(&c, "set tz CET-1CEST,M3.5.0,M10.5.0/3", r, sizeof r) == jf::CmdAction::Changed && c.tz_set);
     CHECK(jf::configCommand(&c, "set colour red", r, sizeof r) == jf::CmdAction::None);
@@ -313,6 +332,66 @@ int main() {
     char small[16];  // tiny reply buffers never overflow
     jf::configCommand(&c, "help", small, sizeof small);
     CHECK(strlen(small) < sizeof small);
+  }
+
+  // Screen layouts: every element fits every panel shape in every mode, the plane's area and the
+  // text never overlap, and Auto picks a sensible mode.
+  {
+    struct Panel {
+      int w, h;
+    };
+    const Panel panels[] = {{320, 240}, {480, 320}, {480, 480}, {320, 480}, {240, 320}, {800, 480},
+                            {448, 368}, {368, 448}, {480, 272}, {1024, 600}};
+    const jf::LayoutMode modes[] = {jf::LayoutMode::Auto, jf::LayoutMode::Side, jf::LayoutMode::SideFlip,
+                                    jf::LayoutMode::Stacked};
+    auto inside = [](const jf::Layout& l, jf::Rect r) {
+      const int x0 = l.X(r.x), y0 = l.Y(r.y), x1 = l.X(r.x + r.w), y1 = l.Y(r.y + r.h);
+      return x0 >= 0 && y0 >= 0 && x1 <= l.w && y1 <= l.h && r.w > 0 && r.h > 0;
+    };
+    auto overlap = [](jf::Rect a, jf::Rect b) {
+      return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    };
+    for (const Panel& p : panels) {
+      for (jf::LayoutMode want : modes) {
+        const jf::Layout l = jf::layoutFor(p.w, p.h, want);
+        CHECK(l.mode != jf::LayoutMode::Auto && l.s > 0.4f);
+        CHECK(inside(l, l.model) && inside(l, l.info));
+        CHECK(!overlap(l.model, l.info));
+        CHECK(l.model.w >= 120 && l.model.h >= 90);  // room for the plane
+        // the canvas fills the screen: no unused margin
+        CHECK(l.cw * l.s <= p.w + 2.0f && l.ch * l.s <= p.h + 2.0f);
+        CHECK(l.cw * l.s >= p.w - 2.0f && l.ch * l.s >= p.h - 2.0f);
+        // text rows sit inside the text area, in order, without touching
+        CHECK(l.call.y >= l.info.y && l.distance.y + 34 <= l.info.y + l.info.h + 2);
+        CHECK(l.altitude.x >= l.info.x && l.speed.x + (l.mode == jf::LayoutMode::Stacked ? 144 : 124) <= l.info.x + l.info.w + 10);
+        CHECK(l.call.y + 24 <= l.airline.y + 2 && l.airline.y + 16 <= l.rule.y + 2 && l.rule.y < l.altitude.y);
+        if (l.mode == jf::LayoutMode::Stacked) {
+          CHECK(l.model.y + l.model.h <= l.compass.y - 12 + 4);                  // the plane is above the text
+          CHECK(l.speed.y == l.altitude.y && l.distance.y > l.altitude.y + 30);  // two columns, then a row
+          CHECK(l.speed.x - l.altitude.x >= 140);                                // columns do not collide
+        } else {
+          CHECK(l.speed.y > l.altitude.y + 30 && l.distance.y > l.speed.y + 30);  // three rows
+          CHECK(l.compass.y + 12 <= l.ch && l.dots.y + 4 <= l.ch);
+        }
+      }
+    }
+    // the default 320x240 layout is exactly the original design
+    const jf::Layout d = jf::layoutFor(320, 240);
+    CHECK(d.mode == jf::LayoutMode::Side && d.s == 1.0f && d.model.x == 14 && d.model.w == 156);
+    CHECK(d.call.x == 186 && d.call.y == 40 && d.altitude.y == 112 && d.speed.y == 150 && d.distance.y == 188);
+    CHECK(d.dots.x == 92 && d.compass.x == 40 && d.divider_x == 176 && d.header_right.x == 306);
+    // Auto: landscape panels get side-by-side, portrait and square get stacked; a stack is never forced onto a landscape panel
+    CHECK(jf::layoutFor(480, 320).mode == jf::LayoutMode::Side);
+    CHECK(jf::layoutFor(480, 480).mode == jf::LayoutMode::Stacked);
+    CHECK(jf::layoutFor(320, 480).mode == jf::LayoutMode::Stacked);
+    CHECK(jf::layoutFor(480, 320, jf::LayoutMode::Stacked).mode == jf::LayoutMode::Side);
+    CHECK(jf::layoutFor(480, 480, jf::LayoutMode::Side).mode == jf::LayoutMode::Stacked);  // no room for side by side
+    CHECK(jf::layoutFor(480, 480, jf::LayoutMode::SideFlip).mode == jf::LayoutMode::Stacked);
+    // flipped: the plane is on the right, the text on the left
+    const jf::Layout f = jf::layoutFor(480, 320, jf::LayoutMode::SideFlip);
+    CHECK(f.model.x > f.info.x && f.call.x < f.model.x && f.divider_x < f.model.x);
+    const jf::Layout n = jf::layoutFor(480, 320, jf::LayoutMode::Side);
+    CHECK(n.model.x < n.info.x && n.call.x > n.model.x + n.model.w);
   }
 
   if (failures == 0) printf("all firmware host tests passed\n");
