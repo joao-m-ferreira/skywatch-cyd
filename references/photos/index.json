@@ -4,6 +4,16 @@
   "reg": "N847MF",
   "type": "B789"
  },
+ "AAR": {
+  "photographer": "Martin Oswald",
+  "reg": "HL8078",
+  "type": "A359"
+ },
+ "ABY": {
+  "photographer": "RAFAL KUKOWSKI",
+  "reg": "A6-ARA",
+  "type": "A20N"
+ },
  "ACA": {
   "photographer": "Toni Marimon",
   "reg": "C-GHKW",
@@ -14,15 +24,50 @@
   "reg": "EC-OSS",
   "type": "B38M"
  },
+ "AEE": {
+  "photographer": "Yassine S",
+  "reg": "SX-NEL",
+  "type": "A20N"
+ },
  "AFR": {
   "photographer": "Bram Steeman",
   "reg": "F-HZUR",
   "type": "BCS3"
  },
+ "AIC": {
+  "photographer": "Alexander Gill",
+  "reg": "VT-ALN",
+  "type": "B77W"
+ },
+ "AMX": {
+  "photographer": "Jason D\u2019Adamo",
+  "reg": "XA-DAE",
+  "type": "B38M"
+ },
+ "ANA": {
+  "photographer": "Liky_",
+  "reg": "JA896A",
+  "type": "B789"
+ },
  "ANE": {
   "photographer": "Niclas Karich",
   "reg": "EC-OOR",
   "type": "CRJX"
+ },
+ "ARG": {
+  "photographer": "Cristian Ariel Mart\u00ednez",
+  "reg": "LV-FUA",
+  "type": "B738"
+ },
+ "ASA": {
+  "photographer": "Sierra Aviation Photography",
+  "reg": "N564AS",
+  "type": "B738"
+ },
+ "ASL": {
+  "photographer": "MilanNN",
+  "reg": "YU-APN",
+  "type": "A319"
  },
  "AUA": {
   "photographer": "Rafal Pruszkowski",
@@ -34,25 +79,105 @@
   "reg": "N780AV",
   "type": "B788"
  },
+ "AXB": {
+  "photographer": "Wuthiwong Wimolsakcharoen",
+  "reg": "VT-AXU",
+  "type": "B738"
+ },
+ "AXM": {
+  "photographer": "Tang Yubo",
+  "reg": "9M-AGS",
+  "type": "A20N"
+ },
+ "AZU": {
+  "photographer": "Alexandro Dias",
+  "reg": "PR-YRZ",
+  "type": "A20N"
+ },
  "BAW": {
   "photographer": "Niklas Engel",
   "reg": "G-NEOZ",
   "type": "A21N"
+ },
+ "BCY": {
+  "photographer": "Gerrit Griem",
+  "reg": "EI-GEA",
+  "type": "CRJ9"
+ },
+ "BOX": {
+  "photographer": "Levent.K",
+  "reg": "D-AALX",
+  "type": "B77L"
+ },
+ "BTI": {
+  "photographer": "Demo Borstell",
+  "reg": "YL-ABI",
+  "type": "BCS3"
+ },
+ "CAL": {
+  "photographer": "81304002",
+  "reg": "B-18717",
+  "type": "B744"
+ },
+ "CCA": {
+  "photographer": "Z Song",
+  "reg": "B-2088",
+  "type": "B77W"
+ },
+ "CFE": {
+  "photographer": "Bram Steeman",
+  "reg": "G-LCYR",
+  "type": "E190"
  },
  "CLX": {
   "photographer": "Jan Seler",
   "reg": "LX-TCV",
   "type": "B744"
  },
+ "CPA": {
+  "photographer": "LIN",
+  "reg": "B-LQC",
+  "type": "A359"
+ },
+ "CTN": {
+  "photographer": "Chris Lofting",
+  "reg": "9A-CAI",
+  "type": "BCS1"
+ },
+ "DAH": {
+  "photographer": "Martin Oswald",
+  "reg": "7T-VKE",
+  "type": "B738"
+ },
  "DAL": {
   "photographer": "Andrew Kuznetsov",
   "reg": "N185DN",
   "type": "B763"
  },
+ "DHK": {
+  "photographer": "Kass B",
+  "reg": "G-DHLY",
+  "type": "B77L"
+ },
+ "DHX": {
+  "photographer": "Luo Chun Hui",
+  "reg": "A9C-DHAA",
+  "type": "B763"
+ },
+ "DLA": {
+  "photographer": "Bj\u00f6rn Huke",
+  "reg": "I-JEND",
+  "type": "E190"
+ },
  "DLH": {
   "photographer": "Justin St\u00f6ckel",
   "reg": "D-ABYA",
   "type": "B748"
+ },
+ "EDW": {
+  "photographer": "Shin Ko",
+  "reg": "HB-JLR",
+  "type": "A320"
  },
  "EIN": {
   "photographer": "Conor Ewings",
@@ -64,15 +189,35 @@
   "reg": "OE-LSV",
   "type": "A20N"
  },
+ "ELY": {
+  "photographer": "Wolfgang Kaiser",
+  "reg": "4X-EDO",
+  "type": "B789"
+ },
  "ETD": {
   "photographer": "Alvis Lam",
   "reg": "A6-BNI",
   "type": "B789"
  },
+ "ETH": {
+  "photographer": "Daniel Filipe Francisco Silva",
+  "reg": "ET-AWE",
+  "type": "B77L"
+ },
+ "EVA": {
+  "photographer": "Wolfgang Kaiser",
+  "reg": "B-16786",
+  "type": "B77L"
+ },
  "EWG": {
   "photographer": "Bj\u00f6rnD",
   "reg": "9H-EXY",
   "type": "A319"
+ },
+ "EXS": {
+  "photographer": "Toni Marimon",
+  "reg": "G-JZBX",
+  "type": "B738"
  },
  "EZS": {
   "photographer": "Justin St\u00f6ckel",
@@ -84,15 +229,40 @@
   "reg": "G-EZBR",
   "type": "A319"
  },
+ "FDB": {
+  "photographer": "MINXUAN ZHANG",
+  "reg": "A6-FEP",
+  "type": "B738"
+ },
  "FDX": {
   "photographer": "Marc Najberg",
   "reg": "N106FE",
   "type": "B763"
  },
+ "FFT": {
+  "photographer": "Wolfgang Kaiser",
+  "reg": "N395FR",
+  "type": "A20N"
+ },
  "FIN": {
   "photographer": "James",
   "reg": "OH-LZR",
   "type": "A321"
+ },
+ "GEC": {
+  "photographer": "Sinan \u00dcst\u00fcn",
+  "reg": "D-ALFE",
+  "type": "B77L"
+ },
+ "GTI": {
+  "photographer": "Eric Wang",
+  "reg": "N855GT",
+  "type": "B748"
+ },
+ "HOP": {
+  "photographer": "Florencio Martin Melian",
+  "reg": "F-HBQE",
+  "type": "E190"
  },
  "IBE": {
   "photographer": "Westley_SJU",
@@ -104,6 +274,11 @@
   "reg": "EC-LAA",
   "type": "A320"
  },
+ "IGO": {
+  "photographer": "Javier Rodriguez",
+  "reg": "VT-ISO",
+  "type": "A20N"
+ },
  "ITY": {
   "photographer": "Spotter_Zulu",
   "reg": "I-ADVC",
@@ -114,10 +289,45 @@
   "reg": "OO-TMT",
   "type": "B38M"
  },
+ "JAL": {
+  "photographer": "ZSAM~L",
+  "reg": "JA08WJ",
+  "type": "A35K"
+ },
+ "JBU": {
+  "photographer": "Joshua Bully | DOMINICA AVIATION",
+  "reg": "N3232J",
+  "type": "BCS3"
+ },
+ "KAC": {
+  "photographer": "zspdjj",
+  "reg": "9K-AOK",
+  "type": "B77W"
+ },
+ "KAL": {
+  "photographer": "SHJ-Korea Aero Photos",
+  "reg": "HL7621",
+  "type": "A388"
+ },
+ "KLC": {
+  "photographer": "Gerrit Griem",
+  "reg": "PH-EXR",
+  "type": "E75L"
+ },
  "KLM": {
   "photographer": "Jan Seler",
   "reg": "PH-AXG",
   "type": "A21N"
+ },
+ "KQA": {
+  "photographer": "Gerrit Griem",
+  "reg": "5Y-KZX",
+  "type": "B77W"
+ },
+ "LAN": {
+  "photographer": "Ant\u00f4nio Carlos Carvalho Jr",
+  "reg": "PT-XPM",
+  "type": "A321"
  },
  "LGL": {
   "photographer": "Tomas Scheffer",
@@ -129,15 +339,55 @@
   "reg": "SP-LNH",
   "type": "E195"
  },
+ "MAS": {
+  "photographer": "Tang Yubo",
+  "reg": "9M-MXC",
+  "type": "B738"
+ },
+ "MEA": {
+  "photographer": "Marvin Knitl",
+  "reg": "T7-ME1",
+  "type": "A21N"
+ },
+ "MSR": {
+  "photographer": "Andr\u00e1s So\u00f3s",
+  "reg": "SU-GFO",
+  "type": "A20N"
+ },
+ "NJE": {
+  "photographer": "Gerrit Griem",
+  "reg": "CS-PHP",
+  "type": "E55P"
+ },
  "NSZ": {
   "photographer": "Alber rs",
   "reg": "LN-NOD",
   "type": "B738"
  },
+ "OMA": {
+  "photographer": "aideenkhan13 ",
+  "reg": "A4O-SK",
+  "type": "B789"
+ },
+ "PAL": {
+  "photographer": "Kwan Lok NG",
+  "reg": "RP-C9932",
+  "type": "A21N"
+ },
  "PGT": {
   "photographer": "Lisandro Pitowski",
   "reg": "TC-NBL",
   "type": "A20N"
+ },
+ "PIA": {
+  "photographer": "AFMD",
+  "reg": "AP-BMH",
+  "type": "B772"
+ },
+ "QFA": {
+  "photographer": "Michael Malone",
+  "reg": "VH-ULW",
+  "type": "A321"
  },
  "QTR": {
   "photographer": "Flyetski",
@@ -149,15 +399,60 @@
   "reg": "CN-RHH",
   "type": "B38M"
  },
+ "RJA": {
+  "photographer": "Gianluca Mantellini",
+  "reg": "JY-RAR",
+  "type": "A20N"
+ },
+ "RPA": {
+  "photographer": "Stephen J Stein",
+  "reg": "N115HQ",
+  "type": "E75L"
+ },
+ "RUK": {
+  "photographer": "Marvin Knitl",
+  "reg": "G-RUKG",
+  "type": "B738"
+ },
  "RYR": {
   "photographer": "Severin Hackenberger",
   "reg": "EI-GXL",
   "type": "B738"
  },
+ "RZO": {
+  "photographer": "Alon Varshaver ",
+  "reg": "CS-TSF",
+  "type": "A21N"
+ },
  "SAS": {
   "photographer": "Daniel Pilkington",
   "reg": "LN-RGL",
   "type": "A20N"
+ },
+ "SEH": {
+  "photographer": "Sebastian K",
+  "reg": "SX-GRA",
+  "type": "A21N"
+ },
+ "SIA": {
+  "photographer": "Ben Tam",
+  "reg": "9V-SKY",
+  "type": "A388"
+ },
+ "SJX": {
+  "photographer": "Jason D\u2019Adamo",
+  "reg": "B-58504",
+  "type": "A359"
+ },
+ "SKW": {
+  "photographer": "Oleg Zharikov",
+  "reg": "N601UX",
+  "type": "E75L"
+ },
+ "SVA": {
+  "photographer": "G. Najberg",
+  "reg": "HZ-ASM",
+  "type": "A321"
  },
  "SWA": {
   "photographer": "Finnographie",
@@ -174,15 +469,30 @@
   "reg": "EC-NXX",
   "type": "B738"
  },
+ "SXS": {
+  "photographer": "Forgacs Zsolt",
+  "reg": "TC-SLA",
+  "type": "B38M"
+ },
  "TAP": {
   "photographer": "Lisandro Pitowski",
   "reg": "CS-TNL",
+  "type": "A320"
+ },
+ "TAR": {
+  "photographer": "Aldo Martinelli",
+  "reg": "TS-ITC",
   "type": "A320"
  },
  "THY": {
   "photographer": "Z Song",
   "reg": "TC-LSU",
   "type": "A21N"
+ },
+ "TOM": {
+  "photographer": "M\u00e1rk \u00c1sin",
+  "reg": "G-TUMN",
+  "type": "B38M"
  },
  "TRA": {
   "photographer": "Tim Hendriks",
@@ -204,6 +514,11 @@
   "reg": "F-HUYE",
   "type": "B738"
  },
+ "TVS": {
+  "photographer": "Markus Altmann",
+  "reg": "OK-EYA",
+  "type": "BCS3"
+ },
  "UAE": {
   "photographer": "Gerrit Griem",
   "reg": "A6-EFN",
@@ -219,6 +534,11 @@
   "reg": "N633UP",
   "type": "B748"
  },
+ "VIR": {
+  "photographer": "Michael Reeves",
+  "reg": "G-VAHH",
+  "type": "B789"
+ },
  "VLG": {
   "photographer": "Jan Seler",
   "reg": "EC-NDB",
@@ -228,6 +548,11 @@
   "photographer": "Rafal Pruszkowski",
   "reg": "EC-NGL",
   "type": "A319"
+ },
+ "WJA": {
+  "photographer": "Wolfgang Kaiser",
+  "reg": "C-GZSG",
+  "type": "B38M"
  },
  "WZZ": {
   "photographer": "Andrzej Rejter",
