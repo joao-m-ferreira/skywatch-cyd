@@ -101,14 +101,14 @@ bool viewGuard() {
   return gCfg->web_open ? true : authorised(true);
 }
 
-// Guards the settings routes: 404 when the web page is off, otherwise the access token is always required (whoever
-// reaches the settings can change the WiFi and the token itself).
+// Guards the settings routes: 404 when the web page is off. With `set webauth on` the token is required; with it off
+// (the default) there is no login anywhere on the web page, settings included.
 bool pageGuard() {
   if (!gCfg->web_on) {
     gServer->send(404, "text/plain", "Not found\n");
     return false;
   }
-  return authorised(true);
+  return gCfg->web_open ? true : authorised(true);
 }
 
 // GET /: the planes page, a small page that polls /api/flights.

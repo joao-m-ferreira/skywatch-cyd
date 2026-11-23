@@ -112,7 +112,7 @@ check "the Server Card lists no required header while it is off"        "echo \"
 r=$(req "$URL/api/flights")
 check "the plane list's JSON needs no login by default (200)"          "echo \"\$r\" | head -1 | grep -q 200"
 r=$(req "$URL/settings")
-check "the settings page needs the token even then (401)"              "echo \"\$r\" | head -1 | grep -q 401"
+check "with no web login the settings page opens without a token (200)" "echo \"\$r\" | head -1 | grep -q 200"
 check "'set webauth on' (typed at an emulated time) puts the login on the plane list" "waitfor view_closed"
 check "'set mcpauth on' (typed at an emulated time) makes /mcp need a token (401)" "waitfor mcp_needs_token"
 r=$(req "$URL/mcp/server-card")
@@ -191,7 +191,7 @@ for i in 1 2 3 4 5; do curl -s -o /dev/null -m 15 -X POST "$URL/mcp" -H 'Authori
 r=$(RPC '{"jsonrpc":"2.0","id":10,"method":"ping"}')
 check "five wrong tokens lock the board out for a minute (429), even for the right one" "echo \"\$r\" | head -1 | grep -q 429"
 
-# 'set webauth off' opens only the read-only part of the web page; the settings keep their login. (A request with no
+# 'set webauth off' (the default) opens the whole web page, settings included. (A request with no
 # credentials is not counted towards the lock-out, so these checks cannot lock the board.)
 check "'set webauth off' opens the plane list's JSON without a login"  "waitfor view_open"
 r=$(req "$URL/")
@@ -199,9 +199,7 @@ check "the plane list page opens without a login too"                  "echo \"\
 r=$(req "$URL/api/status")
 check "/api/status opens without a login and still holds no secret"    "echo \"\$r\" | head -1 | grep -q 200 && echo \"\$r\" | grep -q '\"firmware\":\"emu\"' && ! echo \"\$r\" | grep -Eqi 'token|password|ssid'"
 r=$(req "$URL/settings")
-check "the settings page still needs the token (401)"                  "echo \"\$r\" | head -1 | grep -q 401"
-r=$(req -X POST "$URL/save" --data 'ssid=evil&pass=x&loc=auto&radius=10&plane=7&night=off&from=1&to=5&web=on&mcp=on')
-check "saving settings still needs the token (401)"                    "echo \"\$r\" | head -1 | grep -q 401"
+check "the settings page opens without a login too (200)"              "echo \"\$r\" | head -1 | grep -q 200"
 r=$(req -u "skywatch:$TOKEN" "$URL/settings")
 check "the settings page opens with the token"                          "echo \"\$r\" | head -1 | grep -q 200 && echo \"\$r\" | grep -q 'name=webauth'"
 check "'set webauth on' closes the plane list again (401)"             "waitfor view_closed"

@@ -640,7 +640,7 @@ void loop() {
   // The optional web page / JSON API / MCP server on the board's address (webapi.cpp), announced over mDNS. Each
   // request is answered between the loop's other work; a fetch or route lookup (a few seconds) delays it.
   if (cfg.web_on || cfg.mcp_on) {
-    if (!jf::webActive() && online && jf::olderThan(now, webHoldUntilMs, 0) && ESP.getMaxFreeBlockSize() > 16000) {
+    if (!jf::webActive() && online && jf::olderThan(now, webHoldUntilMs, 0) && ESP.getFreeHeap() > 18000) {  // a fetch stops it again if it needs the room
       ensureToken();
       jf::webStart(&cfg, webSnapshot, onWebSaved);
     }
