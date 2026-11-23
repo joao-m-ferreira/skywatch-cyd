@@ -170,6 +170,18 @@ static Rgb finColor(const Palette& pal, float u, float v) {
     case kTailSolid: break;
     case kTailChecker: motif = (static_cast<int>(u * 5.0f) + static_cast<int>(v * 5.0f)) % 2 == 1; break;
     case kTailDiagSplit: motif = (u - 0.6f * v) > 0.3f; break;
+    case kTailFacet: {
+      // Facets: a hash of the cell picks the colour; gold and brown dominate towards the leading
+      // edge and the top, cream and white towards the trailing edge and the root.
+      const unsigned iu = static_cast<unsigned>(u * 7.0f), iv = static_cast<unsigned>(v * 6.0f);
+      const unsigned h = (iu * 73856093u) ^ (iv * 19349663u) ^ 0x9e3779b9u;
+      const float r1 = static_cast<float>((h >> 3) % 100) / 100.0f;
+      const float r2 = static_cast<float>((h >> 11) % 100) / 100.0f;
+      const float w = (1.0f - u) * 0.6f + v * 0.55f;
+      if (r1 * 1.15f < w) return r2 < 0.6f ? pal.primary : pal.secondary;
+      if (r2 < 0.5f) return {236, 230, 214};
+      return {250, 250, 248};
+    }
     case kTailFlag: {
       // UAE flag: green, white and black stripes rising to the trailing edge, red at the front.
       const float t = v - 0.5f * u;
@@ -197,7 +209,7 @@ static Rgb finColor(const Palette& pal, float u, float v) {
 static void addPatternFin(float x_le0, float x_te0, float z0, float x_le1, float x_te1, float z1,
                           float half_t, const Palette& pal) {
   // The TAP design needs a finer grid (a little more than the default; the budget is tight).
-  const bool fine = (pal.tail == kTailTap || pal.tail == kTailFlag) && gMesh.length < 75.0f;
+  const bool fine = (pal.tail == kTailTap || pal.tail == kTailFlag || pal.tail == kTailFacet) && gMesh.length < 75.0f;
   constexpr int NU_MAX = 7, NV_MAX = 6;
   const int NU = fine ? NU_MAX : 6, NV = fine ? NV_MAX : 5;
   for (int side = -1; side <= 1; side += 2) {
@@ -325,6 +337,25 @@ static bool emiratesBody(size_t seg, int j, const Palette& pal, const Ring* rg, 
   return false;
 }
 
+// Etihad: the name in the primary colour (gold) above the forward windows, and faceted gold and
+// brown patches on the lower rear fuselage and across the rear crown.
+static bool etihadBody(size_t seg, int j, const Palette& pal, const Ring* rg, float h, float L, float nc,
+                       Rgb* out) {
+  const float d = h - 0.5f * (rg[seg].x + rg[seg + 1].x);
+  if ((j == 2 || j == 10) && d >= 0.9f * nc && d < nc + 0.28f * L) {
+    *out = pal.primary;
+    return true;
+  }
+  const bool rear = d >= 0.66f * L && j >= 3 && j <= 9;
+  const bool crown = d >= 0.58f * L && d < 0.72f * L && (j == 11 || j == 0 || j == 1);
+  if (!rear && !crown) return false;
+  switch ((seg * 7u + static_cast<unsigned>(j) * 3u) % 5u) {
+    case 0: case 2: *out = pal.primary; return true;
+    case 1: *out = pal.secondary; return true;
+    default: return false;
+  }
+}
+
 enum Winglet { kWNone, kWFence, kWShark, kWBlend, kWScimitar, kWCant };
 
 static bool hasPrefix(const char* t, const char* p) { return t != nullptr && strncmp(t, p, strlen(p)) == 0; }
@@ -405,6 +436,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
     if (pal.body == kBodyEasy && easyBody(i, j, pal, rg, h, L, nc, &logo)) return logo;
     if (pal.body == kBodyMaersk && maerskBody(i, j, pal, rg, h, L, nc, &logo)) return logo;
     if (pal.body == kBodyEmirates && emiratesBody(i, j, pal, rg, h, L, nc, &logo)) return logo;
+    if (pal.body == kBodyEtihad && etihadBody(i, j, pal, rg, h, L, nc, &logo)) return logo;
     if (pal.body == kBodyTitle && titleBody(i, j, rg, h, L, nc)) return pal.primary;
     if (pal.body == kBodyFull && !(i >= 4 && i <= 6 && j == 0)) return pal.primary;
     if (pal.body == kBodyBelly && i >= 5 && (j >= 3 && j <= 8)) return pal.primary;          // coloured belly
