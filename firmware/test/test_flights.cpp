@@ -119,7 +119,8 @@ int main() {
   // indices and finite coordinates, and projects inside its box, sorted far to near.
   jf::Palette pal = {{252, 250, 242}, {222, 222, 228}, {200, 20, 40}, {40, 40, 40},
                      {150, 190, 220}, {44, 32, 22},    {255, 255, 255}, {205, 205, 210},
-                     {200, 20, 40},   0,               1,             jf::kTailDisc, jf::kBodyCheat};
+                     {200, 20, 40},   0,               1,             jf::kTailDisc, jf::kBodyCheat,
+                     {200, 20, 40}};
   static jf::ScreenTri tris[jf::kMaxTris];
   size_t checked = 0;
   auto checkType = [&](const char* ty) {
@@ -145,17 +146,20 @@ int main() {
     ++checked;
   };
   for (size_t i = 0; i < jf::specCount(); ++i) checkType(jf::specAt(i).prefix);
-  for (int tail = jf::kTailBand; tail <= jf::kTailDiagSplit; ++tail) {  // every livery design builds
-    for (int body = jf::kBodyCheat; body <= jf::kBodyFull; ++body) {
+  for (int tail = jf::kTailBand; tail <= jf::kTailTap; ++tail) {  // every livery design builds
+    for (int body = jf::kBodyCheat; body <= jf::kBodyTitle; ++body) {
       pal.tail = static_cast<uint8_t>(tail);
       pal.body = static_cast<uint8_t>(body);
       checkType("A320");
     }
   }
+  pal.tail = jf::kTailTap;  // TAP's finer fin and extra fuselage rings must fit every aircraft
+  pal.body = jf::kBodyPlain;
+  for (size_t i = 0; i < jf::specCount(); ++i) checkType(jf::specAt(i).prefix);
   pal.tail = jf::kTailDisc;
   pal.body = jf::kBodyCheat;
   for (const char* ty : {"", "ZZZZ", "EC35", "C172", "GLF5", "AT76", "CRJ9"}) checkType(ty);
-  CHECK(checked == jf::specCount() + 7 + 27);
+  CHECK(checked == 2 * jf::specCount() + 7 + 60);
   // Types look different from each other.
   CHECK(jf::specFor("A319").length < jf::specFor("A320").length);
   CHECK(jf::specFor("A320").length < jf::specFor("A321").length);

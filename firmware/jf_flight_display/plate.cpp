@@ -105,13 +105,16 @@ void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
   uint16_t pri = g.color565(120, 130, 150), sec = g.color565(90, 95, 105);
   jf::Palette pal = {{252, 250, 242}, {222, 222, 228}, {120, 130, 150}, {90, 95, 105},
                      {150, 190, 220}, {44, 32, 22},    {255, 255, 255}, {205, 205, 210},
-                     {120, 130, 150}, lv.nose_red,     0,       lv.tail, lv.body};
+                     {120, 130, 150}, lv.nose_red,     0,       lv.tail, lv.body,
+                     {120, 130, 150}};
   if (al != nullptr) {
     pal.primary = {al->r1, al->g1, al->b1};
     pal.secondary = {al->r2, al->g2, al->b2};
+    pal.tip = pal.primary;
     pri = g.color565(al->r1, al->g1, al->b1);
     sec = g.color565(al->r2, al->g2, al->b2);
   }
+  if (lv.tail == jf::kTailTap) pal.tip = pal.secondary;  // TAP: red winglets
   switch (lv.fin_base) {
     case jf::kFinWhite: pal.fin = {250, 250, 250}; break;
     case jf::kFinSecondary: pal.fin = pal.secondary; break;

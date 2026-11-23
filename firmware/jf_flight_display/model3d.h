@@ -22,6 +22,7 @@ struct Palette {
   uint8_t gear;     // 1 = landing gear down (drawn when the plane is low and slow)
   uint8_t tail;     // jf::Tail
   uint8_t body;     // jf::Body
+  Rgb tip;          // winglet / wingtip colour
 };
 
 constexpr size_t kMaxVerts = 940;   // the largest mesh in the table (An-225, gear down) has 924

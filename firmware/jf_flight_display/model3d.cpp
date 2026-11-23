@@ -170,6 +170,15 @@ static Rgb finColor(const Palette& pal, float u, float v) {
     case kTailSolid: break;
     case kTailChecker: motif = (static_cast<int>(u * 5.0f) + static_cast<int>(v * 5.0f)) % 2 == 1; break;
     case kTailDiagSplit: motif = (u - 0.6f * v) > 0.3f; break;
+    case kTailTap: {
+      // Red fin; a green wedge hugs the leading edge from the root (narrowing to the top),
+      // parted from the red by a thin white flash, and a small white flag near the top.
+      const float edge = 0.62f * (1.0f - v / 0.8f);  // wedge boundary as a function of height
+      if (v < 0.8f && u < edge) return pal.motif;
+      if (v < 0.85f && u < edge + 0.12f) return {250, 250, 250};
+      if (v > 0.55f && v < 0.8f && u > 0.3f && u < 0.52f) return {250, 250, 250};
+      return pal.fin;
+    }
     default: motif = v < 0.2f; break;  // kTailBand
   }
   return motif ? pal.motif : pal.fin;
@@ -178,9 +187,12 @@ static Rgb finColor(const Palette& pal, float u, float v) {
 // Fin as a grid of cells on both faces so a design can be painted on it.
 static void addPatternFin(float x_le0, float x_te0, float z0, float x_le1, float x_te1, float z1,
                           float half_t, const Palette& pal) {
-  constexpr int NU = 6, NV = 5;
+  // The TAP design needs a finer grid (a little more than the default; the budget is tight).
+  const bool fine = pal.tail == kTailTap && gMesh.length < 75.0f;
+  constexpr int NU_MAX = 7, NV_MAX = 6;
+  const int NU = fine ? NU_MAX : 6, NV = fine ? NV_MAX : 5;
   for (int side = -1; side <= 1; side += 2) {
-    size_t id[NV + 1][NU + 1];
+    size_t id[NV_MAX + 1][NU_MAX + 1];
     for (int j = 0; j <= NV; ++j) {
       const float v = static_cast<float>(j) / NV;
       const float le = x_le0 + (x_le1 - x_le0) * v, te = x_te0 + (x_te1 - x_te0) * v;
@@ -229,6 +241,43 @@ static void buildHeli(const AircraftSpec& s, const Palette& pal) {
   addQuad(a0, a1, a2, a3, pal.dark);
   const size_t b0 = addV(-bw, R, zr), b1 = addV(bw, R, zr), b2 = addV(bw, -R, zr), b3 = addV(-bw, -R, zr);
   addQuad(b0, b1, b2, b3, pal.dark);
+}
+
+// TAP's forward-fuselage logo block: lime, green and red vertical bands from the roof down to the
+// belly on both sides, starting behind the cockpit windows. `seg` is the fuselage segment between
+// ring seg and seg+1 (rings listed nose to tail).
+static bool tapLogo(size_t seg, int j, const Palette& pal, const Ring* rg, float h, float nc,
+                    Rgb* out) {
+  if (j == 0 || (j >= 5 && j <= 7)) return false;  // roof and belly stay white
+  const float d = h - 0.5f * (rg[seg].x + rg[seg + 1].x);  // distance of the segment from the nose
+  const float s0 = nc;  // the cabin starts here; its rings are evenly spaced, one band per segment
+  const float w = fabsf(rg[seg].x - rg[seg + 1].x);
+  if (w < 1e-3f || d < s0 || d >= s0 + 4.0f * w) return false;
+  if (d < s0 + w) *out = pal.primary;                      // lime
+  else if (d < s0 + 2.0f * w) *out = {70, 150, 50};        // green
+  else *out = pal.secondary;                               // red
+  return true;
+}
+
+// easyJet's fuselage: an orange crown from behind the cockpit windows that narrows towards the
+// wing, and an orange rear fuselage below a slanting line (here: belly first, then the whole side).
+static bool easyBody(size_t seg, int j, const Palette& pal, const Ring* rg, float h, float L, float nc,
+                     Rgb* out) {
+  const float d = h - 0.5f * (rg[seg].x + rg[seg + 1].x);
+  const bool top = j == 11 || j == 0 || j == 1;
+  const bool crown = top || j == 10 || j == 2;
+  const bool front = d >= 0.55f * nc && ((d < 0.45f * L && crown) || (d < 0.58f * L && top));
+  const bool rear = (d >= 0.70f * L && j >= 4 && j <= 8) || (d >= 0.80f * L && !top);
+  if (!front && !rear) return false;
+  *out = pal.primary;
+  return true;
+}
+
+// Airline name painted along the forward fuselage, just above the windows (both sides).
+static bool titleBody(size_t seg, int j, const Ring* rg, float h, float L, float nc) {
+  if (j != 2 && j != 10) return false;
+  const float d = h - 0.5f * (rg[seg].x + rg[seg + 1].x);
+  return d >= 0.9f * nc && d < nc + 0.30f * L;
 }
 
 enum Winglet { kWNone, kWFence, kWShark, kWBlend, kWScimitar, kWCant };
@@ -302,13 +351,17 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   const bool windows = D >= 2.0f;
   const bool neo = isNeo(type);
   const Rgb window = {38, 52, 78};  // dark slate: reads as a continuous window band
+  Rgb logo = pal.hull;
   loft(rg, nr, [&](size_t i, int j) {
     if (i >= 5 && i <= 6 && (j == 11 || j == 0 || j == 1)) return pal.glass;  // windshield
     if (pal.nose_red && i < 4) return pal.primary;                       // red nose cone
     if (neo && i >= 5 && i <= 6 && (j == 10 || j == 2)) return pal.dark;  // "raccoon mask"
+    if (pal.tail == kTailTap && tapLogo(i, j, pal, rg, h, nc, &logo)) return logo;
+    if (pal.body == kBodyEasy && easyBody(i, j, pal, rg, h, L, nc, &logo)) return logo;
+    if (pal.body == kBodyTitle && titleBody(i, j, rg, h, L, nc)) return pal.primary;
     if (pal.body == kBodyFull && !(i >= 4 && i <= 6 && j == 0)) return pal.primary;
     if (pal.body == kBodyBelly && i >= 5 && (j >= 3 && j <= 8)) return pal.primary;          // coloured belly
-    if (j == 3 || j == 8) return i >= 5 ? pal.primary : pal.hull;                            // cheatline
+    if ((j == 3 || j == 8) && pal.body == kBodyCheat) return i >= 5 ? pal.primary : pal.hull;  // cheatline
     if (j >= 4 && j <= 7) return pal.belly;
     return pal.hull;
   });
@@ -382,21 +435,21 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
     const float zt = z_root + dih, S = s.span, ht = 0.03f * D;
     switch (wingletFor(type, s)) {
       case kWFence:  // small fence above and below the tip
-        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.3f * S * 0.02f, x_te_tip - 0.1f, zt + 0.02f * S, sg * b, ht, pal.primary);
-        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.2f, x_te_tip - 0.1f, zt - 0.012f * S, sg * b, ht, pal.primary);
+        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.3f * S * 0.02f, x_te_tip - 0.1f, zt + 0.02f * S, sg * b, ht, pal.tip);
+        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.2f, x_te_tip - 0.1f, zt - 0.012f * S, sg * b, ht, pal.tip);
         break;
       case kWShark:  // tall, curved, swept back
-        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.055f * S, x_te_tip - 0.012f * S, zt + 0.05f * S, sg * (b + 0.008f * S), ht, pal.primary);
+        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.055f * S, x_te_tip - 0.012f * S, zt + 0.05f * S, sg * (b + 0.008f * S), ht, pal.tip);
         break;
       case kWBlend:  // tall blended winglet
-        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.04f * S, x_te_tip - 0.02f * S, zt + 0.06f * S, sg * (b + 0.012f * S), ht, pal.primary);
+        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.04f * S, x_te_tip - 0.02f * S, zt + 0.06f * S, sg * (b + 0.012f * S), ht, pal.tip);
         break;
       case kWScimitar:  // split scimitar: blended winglet plus a lower blade
-        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.045f * S, x_te_tip - 0.015f * S, zt + 0.055f * S, sg * (b + 0.01f * S), ht, pal.primary);
-        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.03f * S, x_te_tip - 0.01f * S, zt - 0.02f * S, sg * (b + 0.004f * S), ht, pal.primary);
+        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.045f * S, x_te_tip - 0.015f * S, zt + 0.055f * S, sg * (b + 0.01f * S), ht, pal.tip);
+        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.03f * S, x_te_tip - 0.01f * S, zt - 0.02f * S, sg * (b + 0.004f * S), ht, pal.tip);
         break;
       case kWCant:  // angled, canted outward
-        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.035f * S, x_te_tip - 0.015f * S, zt + 0.04f * S, sg * (b + 0.025f * S), ht, pal.primary);
+        addWinglet(x_le_tip, x_te_tip, zt, sg * b, x_le_tip - 0.035f * S, x_te_tip - 0.015f * S, zt + 0.04f * S, sg * (b + 0.025f * S), ht, pal.tip);
         break;
       case kWNone: break;
     }

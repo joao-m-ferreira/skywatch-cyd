@@ -15,14 +15,18 @@ enum Tail : uint8_t {
   kTailSolid = 5,     // plain
   kTailCross = 6,     // cross
   kTailChecker = 7,   // checkerboard (Volotea, Azul mosaic)
-  kTailDiagSplit = 8  // everything behind a diagonal line in the motif colour (TAP)
+  kTailDiagSplit = 8, // everything behind a diagonal line in the motif colour
+  kTailTap = 9        // TAP: red fin, green wedge on the leading edge, white flash, forward logo block
 };
 
 // How the fuselage is painted.
 enum Body : uint8_t {
   kBodyCheat = 0,  // white with a cheatline in the primary colour
   kBodyBelly = 1,  // primary colour over the lower half
-  kBodyFull = 2    // primary colour all over
+  kBodyFull = 2,   // primary colour all over
+  kBodyPlain = 3,  // all white, no cheatline
+  kBodyEasy = 4,   // easyJet: orange crown on the forward fuselage, orange rear fuselage
+  kBodyTitle = 5   // white with the airline name as a primary-colour band on the forward fuselage
 };
 
 enum FinBase : uint8_t { kFinPrimary = 0, kFinWhite = 1, kFinSecondary = 2 };
