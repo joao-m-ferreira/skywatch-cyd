@@ -7,6 +7,11 @@ type, route, altitude, speed, distance, a compass, and a shaded 3D model in the 
 
 **[Open the web portal](https://joao-m-ferreira.github.io/skywatch-cyd/)** to flash a board from your browser in a minute, with nothing to install.
 
+<p align="center"><img src="docs/images/board-cyd.png" width="620" alt="The skywatch-cyd plate on a Cheap Yellow Display: a TAP Air Portugal A321neo, with airline, type, altitude, speed and distance"></p>
+<p align="center"><sub>What the screen shows (illustration). The 3D aircraft is drawn by the firmware itself, in the airline's colours.</sub></p>
+
+Every aircraft type gets its own shape and every airline its own paint:
+
 ![3D aircraft models rendered by the firmware's own code (host-side preview)](docs/images/models.png)
 
 <sub>Twelve airlines on twelve aircraft types, rendered on the host from the same 3D code that runs on the board, so the shapes and liveries match; the real screen is 320×240 and looks smaller and blockier. Regenerate with `python3 scripts/readme_image.py`.</sub>
