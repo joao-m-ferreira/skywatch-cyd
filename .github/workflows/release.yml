@@ -1,11 +1,10 @@
 # Tag-driven release: build in a CLEAN checkout -> verify the exact files -> publish. Nothing else publishes.
-# Used when the project ships artifacts (it has scripts/package.sh). The
-# project-specific parts live in three scripts the project owns; this file never changes per project:
+# The project-specific parts live in scripts the project owns:
 #   scripts/package.sh        builds the distributable files into dist/ (env VERSION is set)      [required]
-#   scripts/verify-package.sh smoke-tests THOSE files in dist/ (emulator, install, run --help...)  [required]
+#   scripts/verify-package.sh smoke-tests THOSE files in dist/                                     [required]
 #   scripts/release-setup.sh  installs toolchains the packager needs (optional, run before package)
-# scripts/check_artifacts.py refuses a dist/ with no version stamp or with a value from a
-# git-ignored local config file in it, and writes/verifies SHA256SUMS.
+# scripts/check_artifacts.py refuses a dist/ with no version stamp or with a value from a git-ignored local
+# config file in it, and writes/verifies SHA256SUMS.
 #
 # Push a tag v<major>.<minor>.<patch>[-pre] to release. Run it by hand (Actions -> Release -> Run workflow) as a
 # REHEARSAL: it builds and verifies, never publishes. A failing build or verify publishes nothing. Release notes
