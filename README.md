@@ -7,8 +7,7 @@ type, route, altitude, speed, distance, a compass, and a shaded 3D model in the 
 
 ![3D aircraft models rendered by the firmware's own code (host-side preview)](docs/images/models.png)
 
-<sub>Rendered on the host from the same 3D code that runs on the board, so the shapes and liveries are
-exact; the real screen is 320×240 and looks smaller and blockier.</sub>
+<sub>TAP, easyJet, Air Europa, Emirates / Etihad, Maersk Air Cargo, Air Transat, Lufthansa / Ryanair, British Airways, Qantas, Qatar. Rendered on the host from the same 3D code that runs on the board, so the shapes and liveries match; the real screen is 320×240 and looks smaller and blockier.</sub>
 
 ## Features
 - **Carousel** of the nearest aircraft (default 40 km), touch to skip ahead. 20 s data refresh.
@@ -17,8 +16,9 @@ exact; the real screen is 320×240 and looks smaller and blockier.</sub>
 - **3D models** built on the board from real dimensions of ~110 types (A220–A380, 737–787, E-Jets, CRJ,
   ATR, Dash 8, business jets, light aircraft, helicopters), with winglets, engines, windows, doors,
   landing gear when low and slow, and the 747 hump / A380 double deck.
-- **Liveries** for ~140 airlines: fuselage scheme, tail designs (disc, stripes, diagonal, checker,
-  cross…), tinted fuselages, engine colours.
+- **Liveries** for ~160 airlines: fuselage scheme, tail designs (disc, stripes, diagonal, checker,
+  cross, faceted, flag stripes…), tinted fuselages, engine and winglet colours, plus airline-specific
+  paint such as TAP's logo block, easyJet's orange crown and Etihad's gold facets.
 - **Photos** of the actual aircraft from planespotters.net by registration (photographer credited),
   with the 3D model as fallback.
 - **RGB LED** in the airline's colour; airlines with two real colours (Ryanair, TAP…) hold and fade
