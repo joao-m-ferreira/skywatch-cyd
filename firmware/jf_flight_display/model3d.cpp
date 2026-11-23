@@ -384,7 +384,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
     buildHeli(s, pal);
     return gMesh;
   }
-  const float L = s.length, h = L / 2.0f, D = s.fuselage_w * 1.45f, R = D / 2.0f;  // chunkier for legibility
+  const float L = s.length, h = L / 2.0f, D = s.fuselage_w * 1.3f, R = D / 2.0f;  // a little chunkier than real, for legibility
   const float b = s.span / 2.0f, tanL = tanf(rad(s.sweep_deg));
   const bool high = s.mount == Mount::Prop;
   const float nc = 1.6f * D, tc = 2.6f * D;
@@ -396,7 +396,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   const float nose_u[kNose] = {0.0f, 0.03f, 0.09f, 0.18f, 0.32f, 0.52f, 0.76f, 1.0f};
   for (int i = 0; i < kNose; ++i) {
     const float u = nose_u[i];
-    const float r = fmaxf(0.015f * R, R * sqrtf(fmaxf(0.0f, 2.0f * u - u * u)));
+    const float r = fmaxf(0.015f * R, R * (1.0f - powf(1.0f - u, 2.0f)));  // cone-like nose, rounded tip
     rg[nr++] = {h - nc * u, -0.12f * R * (1.0f - u), r, r};
   }
   constexpr int kCabin = 14;
@@ -432,7 +432,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   loft(rg, nr, [&](size_t i, int j) {
     if (i >= 5 && i <= 6 && (j == 11 || j == 0 || j == 1)) return pal.glass;  // windshield
     if (pal.nose_red && i < 4) return pal.primary;                       // red nose cone
-    if (neo && i >= 5 && i <= 6 && (j == 10 || j == 2)) return pal.dark;  // "raccoon mask"
+    if (i == 6 && (j == 10 || j == 2)) return neo ? pal.dark : window;      // cockpit side windows
     if (pal.tail == kTailTap && tapLogo(i, j, pal, rg, h, nc, &logo)) return logo;
     if (pal.body == kBodyEasy && easyBody(i, j, pal, rg, h, L, nc, &logo)) return logo;
     if (pal.body == kBodyMaersk && maerskBody(i, j, pal, rg, h, L, nc, true, &logo)) return logo;
@@ -470,7 +470,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
     const float* ys = s.engines == 6 ? ys6 : s.engines == 4 ? ys4 : ys2;
     for (int i = 0; i < s.engines / 2; ++i) {
       const float ye = ys[i], nl = 1.8f * nw, front = leAt(ye) + (neo ? 0.62f : 0.5f) * nl;
-      const float zc = zAt(ye) - 0.55f * nw;
+      const float zc = zAt(ye) - 0.45f * nw;
       for (int sg = -1; sg <= 1; sg += 2) {
         addCyl(front, front - nl, sg * ye, zc, nw / 2, nw / 2 * 0.85f, pal.engine, pal.dark);
         addVertical(front - 0.15f * nl, front - 0.85f * nl, zc + 0.4f * nw, front - 0.3f * nl,
