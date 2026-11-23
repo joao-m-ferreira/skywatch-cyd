@@ -397,6 +397,7 @@ struct Style {
   bool rake = false;       // raked wingtips (777, 787)
   bool ttail = false;      // horizontal tail on top of the fin
   bool low_wing = false;   // light aircraft with a low wing (Piper, Cirrus, Diamond)
+  float dihedral = 1.0f;   // wing dihedral factor (787 and A350 wings flex up in flight)
 };
 static Style styleFor(const char* t, const AircraftSpec& s) {
   Style st;
@@ -414,17 +415,17 @@ static Style styleFor(const char* t, const AircraftSpec& s) {
   } else if (any({"BCS"})) {  // A220: short blunt nose, big fin and engines
     st.nose_pow = 2.4f; st.nose_len = 0.9f; st.tail_len = 0.9f; st.fin = 1.12f; st.eng_w = 1.15f;
   } else if (any({"B73", "B37", "B38", "B39", "B3X"})) {  // 737: slim engines tucked right up to the wing
-    st.nose_pow = 1.95f; st.tail_len = 0.9f; st.fin = 0.95f; st.eng_w = 0.92f; st.tuck = 0.28f;
+    st.nose_pow = 1.85f; st.tail_len = 0.9f; st.fin = 1.02f; st.eng_w = 0.92f; st.tuck = 0.28f;
   } else if (any({"B75"})) {
     st.nose_pow = 1.7f; st.nose_len = 1.1f; st.tail_len = 1.05f; st.eng_w = 1.05f;
   } else if (any({"B77"})) {  // 777: huge engines, raked tips
-    st.nose_pow = 1.9f; st.tail_len = 1.1f; st.fin = 0.95f; st.eng_w = 1.22f; st.eng_len = 1.1f; st.rake = true;
+    st.nose_pow = 1.9f; st.tail_len = 1.1f; st.fin = 0.95f; st.eng_w = 1.22f; st.eng_len = 1.1f; st.rake = true; st.dihedral = 1.3f;
   } else if (any({"B78"})) {  // 787: long pointed nose, long nacelles, raked tips
-    st.nose_pow = 1.65f; st.nose_len = 1.1f; st.tail_len = 1.12f; st.fin = 0.95f; st.eng_len = 1.25f; st.rake = true;
+    st.nose_pow = 1.65f; st.nose_len = 1.1f; st.tail_len = 1.12f; st.fin = 0.95f; st.eng_len = 1.25f; st.rake = true; st.dihedral = 1.9f;
   } else if (any({"A30", "A31", "A33"})) {  // A300/A310/A330: big engines close to the fuselage
     st.nose_pow = 1.9f; st.eng_w = 1.12f; st.tail_len = 1.05f;
   } else if (any({"A35"})) {  // A350: pointed nose, big fin, long nacelles
-    st.nose_pow = 1.65f; st.nose_len = 1.1f; st.tail_len = 1.1f; st.fin = 1.05f; st.eng_len = 1.2f;
+    st.nose_pow = 1.65f; st.nose_len = 1.1f; st.tail_len = 1.1f; st.fin = 1.05f; st.eng_len = 1.2f; st.dihedral = 1.5f;
   } else if (any({"B748"})) {  // 747-8: raked tips, no winglets
     st.fin = 1.05f; st.rake = true; st.eng_len = 1.15f;
   } else if (any({"B74"})) {
@@ -487,8 +488,8 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
       if (dx >= 0.07f * L && dx < 0.12f * L) bump = (dx - 0.07f * L) / (0.05f * L);
       else if (dx >= 0.12f * L && dx < 0.24f * L) bump = 1.0f;
       else if (dx >= 0.24f * L && dx < 0.34f * L) bump = (0.34f * L - dx) / (0.10f * L);
-      rg[i].rz = R * (rg[i].rz / R) * (1.0f + 0.22f * bump);
-      rg[i].zc += 0.22f * R * bump;
+      rg[i].rz = R * (rg[i].rz / R) * (1.0f + 0.30f * bump);  // upper deck: taller...
+      rg[i].zc += 0.30f * R * bump;                              // ...and raised, so the hump shows
     }
   }
   const bool windows = D >= 2.0f;
@@ -515,7 +516,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
 
   // --- Wings: swept, tapered, with dihedral (sharklets on under-wing jets). ---
   const float z_root = high ? 0.75f * R : -0.45f * R;
-  const float dih = high ? 0.01f * b : 0.07f * b;
+  const float dih = (high ? 0.01f * b : 0.07f * b) * st.dihedral;
   const float y_root = 0.6f * R;
   const float x_le = h - s.wing_pos * L;
   // Wing chords are drawn ~30% larger than real: the fuselage is fattened for legibility too.
@@ -523,7 +524,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   const float x_le_tip = x_le - (b - y_root) * tanL, x_te = x_le - rc;
   const float x_te_tip = x_le_tip - tcd;
   const float t_root = 0.15f * rc, t_tip = 0.12f * tcd + 0.03f;
-  const Rgb wingc = {234, 232, 228};  // light grey-white whatever the hull tint (real wings are unpainted)  // slightly grey: shows the planform
+  const Rgb wingc = {216, 216, 218};  // unpainted light grey, whatever the hull tint  // slightly grey: shows the planform
   auto leAt = [&](float ye) { return x_le - (ye - y_root) * tanL; };
   auto zAt = [&](float ye) { return z_root + dih * (ye - y_root) / (b - y_root); };
 
@@ -637,7 +638,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
     const float zt = st.ttail ? R + 0.95f * hf : 0.35f * R;
     for (int sg = -1; sg <= 1; sg += 2) {
       addHorizontal(static_cast<float>(sg), 0.3f * R, ts / 2, le, te, tip_le, tip_le - tct, zt, zt,
-                    0.03f * D, 0.02f * D, pal.hull);
+                    0.03f * D, 0.02f * D, wingc);
     }
   }
   // --- Landing gear (only when the plane is low and slow). ---
