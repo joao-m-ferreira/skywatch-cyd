@@ -376,6 +376,56 @@ static Winglet wingletFor(const char* t, const AircraftSpec& s) {
   return kWShark;
 }
 
+// Per-family shape adaptations on top of the dimensions table: nose and tail-cone shape, engine
+// size and how tightly they tuck under the wing, fin size, raked wingtips, T-tails.
+struct Style {
+  float nose_pow = 2.0f;   // nose profile: higher = more pointed
+  float nose_len = 1.0f;   // nose cone length factor
+  float tail_len = 1.0f;   // tail cone length factor
+  float fin = 1.0f;        // vertical fin height factor
+  float eng_w = 1.0f;      // engine diameter factor
+  float eng_len = 1.0f;    // engine length factor
+  float tuck = 0.45f;      // engine drop below the wing, in nacelle diameters
+  bool rake = false;       // raked wingtips (777, 787)
+  bool ttail = false;      // horizontal tail on top of the fin
+};
+static Style styleFor(const char* t, const AircraftSpec& s) {
+  Style st;
+  st.ttail = s.mount == Mount::Rear || (s.mount == Mount::Prop && s.engines > 0);
+  auto any = [&](std::initializer_list<const char*> ps) {
+    for (const char* p : ps) {
+      if (hasPrefix(t, p)) return true;
+    }
+    return false;
+  };
+  if (any({"A318", "A319", "A320", "A321", "A19N", "A20N", "A21N"})) {
+    st.nose_pow = 1.9f; st.tail_len = 0.95f;
+  } else if (any({"BCS"})) {  // A220: short blunt nose, big fin and engines
+    st.nose_pow = 1.6f; st.nose_len = 0.9f; st.tail_len = 0.9f; st.fin = 1.12f; st.eng_w = 1.15f;
+  } else if (any({"B73", "B37", "B38", "B39", "B3X"})) {  // 737: slim engines tucked right up to the wing
+    st.nose_pow = 2.1f; st.tail_len = 0.9f; st.fin = 0.95f; st.eng_w = 0.92f; st.tuck = 0.28f;
+  } else if (any({"B75"})) {
+    st.nose_pow = 2.4f; st.nose_len = 1.1f; st.tail_len = 1.05f; st.eng_w = 1.05f;
+  } else if (any({"B77"})) {  // 777: huge engines, raked tips
+    st.nose_pow = 2.2f; st.tail_len = 1.1f; st.fin = 0.95f; st.eng_w = 1.22f; st.eng_len = 1.1f; st.rake = true;
+  } else if (any({"B78"})) {  // 787: long pointed nose, long nacelles, raked tips
+    st.nose_pow = 2.7f; st.nose_len = 1.12f; st.tail_len = 1.12f; st.fin = 0.95f; st.eng_len = 1.25f; st.rake = true;
+  } else if (any({"A35"})) {  // A350: pointed nose, big fin, long nacelles
+    st.nose_pow = 2.7f; st.nose_len = 1.12f; st.tail_len = 1.1f; st.fin = 1.05f; st.eng_len = 1.2f;
+  } else if (any({"B74"})) {
+    st.fin = 1.05f;
+  } else if (any({"A388"})) {
+    st.nose_pow = 1.8f;
+  } else if (any({"E17", "E75", "E19", "E29"})) {
+    st.nose_pow = 1.8f; st.nose_len = 0.95f; st.eng_w = 0.95f;
+  } else if (s.mount == Mount::Prop) {
+    st.nose_pow = 1.7f;
+  } else if (s.mount == Mount::Rear && s.engines > 0 && s.length < 40.0f) {  // business jets, regional jets
+    st.nose_pow = 2.3f; st.nose_len = 1.1f;
+  }
+  return st;
+}
+
 const Mesh& buildAircraft(const char* type, const Palette& pal) {
   const AircraftSpec& s = specFor(type);
   gMesh.nv = gMesh.nt = 0;
@@ -387,7 +437,8 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   const float L = s.length, h = L / 2.0f, D = s.fuselage_w * 1.3f, R = D / 2.0f;  // a little chunkier than real, for legibility
   const float b = s.span / 2.0f, tanL = tanf(rad(s.sweep_deg));
   const bool high = s.mount == Mount::Prop;
-  const float nc = 1.6f * D, tc = 2.6f * D;
+  const Style st = styleFor(type, s);
+  const float nc = 1.6f * D * st.nose_len, tc = 2.6f * D * st.tail_len;
 
   // --- Fuselage rings, nose to tail. ---
   Ring rg[28];
@@ -396,7 +447,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   const float nose_u[kNose] = {0.0f, 0.03f, 0.09f, 0.18f, 0.32f, 0.52f, 0.76f, 1.0f};
   for (int i = 0; i < kNose; ++i) {
     const float u = nose_u[i];
-    const float r = fmaxf(0.015f * R, R * (1.0f - powf(1.0f - u, 2.0f)));  // cone-like nose, rounded tip
+    const float r = fmaxf(0.015f * R, R * (1.0f - powf(1.0f - u, st.nose_pow)));  // cone-like nose, rounded tip
     rg[nr++] = {h - nc * u, -0.12f * R * (1.0f - u), r, r};
   }
   constexpr int kCabin = 14;
@@ -462,15 +513,15 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   auto zAt = [&](float ye) { return z_root + dih * (ye - y_root) / (b - y_root); };
 
   // Engines first (the wing is drawn over their rear part by depth sorting anyway).
-  const float nw = s.nacelle_w * 1.35f * (neo ? 1.12f : 1.0f);
+  const float nw = s.nacelle_w * 1.35f * (neo ? 1.12f : 1.0f) * st.eng_w;
   if (s.mount == Mount::UnderWing && s.engines >= 2) {
     const float ys6[3] = {0.20f * b, 0.40f * b, 0.62f * b};
     const float ys4[2] = {0.30f * b, 0.62f * b};
     const float ys2[1] = {0.32f * b};
     const float* ys = s.engines == 6 ? ys6 : s.engines == 4 ? ys4 : ys2;
     for (int i = 0; i < s.engines / 2; ++i) {
-      const float ye = ys[i], nl = 1.8f * nw, front = leAt(ye) + (neo ? 0.62f : 0.5f) * nl;
-      const float zc = zAt(ye) - 0.45f * nw;
+      const float ye = ys[i], nl = 1.8f * nw * st.eng_len, front = leAt(ye) + (neo ? 0.62f : 0.5f) * nl;
+      const float zc = zAt(ye) - st.tuck * nw;
       for (int sg = -1; sg <= 1; sg += 2) {
         addCyl(front, front - nl, sg * ye, zc, nw / 2, nw / 2 * 0.85f, pal.engine, pal.dark);
         addVertical(front - 0.15f * nl, front - 0.85f * nl, zc + 0.4f * nw, front - 0.3f * nl,
@@ -510,8 +561,17 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   }
 
   for (int sg = -1; sg <= 1; sg += 2) {
-    addHorizontal(static_cast<float>(sg), y_root, b, x_le, x_te, x_le_tip, x_te_tip, z_root,
-                  z_root + dih, t_root, t_tip, wingc);
+    if (st.rake) {  // main panel to 84% span, then a more swept, tapered outer panel
+      const float yr = 0.84f * b, f = (yr - y_root) / (b - y_root);
+      const float xte_r = x_te + (x_te_tip - x_te) * f, tr = t_root + (t_tip - t_root) * f;
+      addHorizontal(static_cast<float>(sg), y_root, yr, x_le, x_te, leAt(yr), xte_r, z_root, zAt(yr), t_root, tr, wingc);
+      const float le_o = leAt(yr) - (b - yr) * tanf(rad(s.sweep_deg + 32.0f));
+      addHorizontal(static_cast<float>(sg), yr, b, leAt(yr), xte_r, le_o, le_o - 0.55f * tcd, zAt(yr), zAt(yr) + 0.02f * b,
+                    tr, t_tip, wingc);
+    } else {
+      addHorizontal(static_cast<float>(sg), y_root, b, x_le, x_te, x_le_tip, x_te_tip, z_root,
+                    z_root + dih, t_root, t_tip, wingc);
+    }
     const float zt = z_root + dih, S = s.span, ht = 0.03f * D;
     switch (wingletFor(type, s)) {
       case kWFence:  // small fence above and below the tip
@@ -540,6 +600,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   if (s.mount == Mount::Rear) hf = 0.16f * L;
   else if (s.mount == Mount::Prop) hf = s.engines > 0 ? 0.14f * L : 0.12f * L;
   else hf = D >= 5.0f ? 0.12f * L : 0.145f * L;
+  hf *= st.fin;
   const float fin_le = -h + 0.16f * L, fin_te = -h + 0.01f * L;
   const float fin_tip_le = fin_le - 0.55f * hf, fin_tip_te = fin_tip_le - 0.07f * L;
   addPatternFin(fin_le, fin_te, 0.55f * R, fin_tip_le, fin_tip_te, R + hf, 0.04f * D, pal);
@@ -547,9 +608,10 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
     const bool straight = s.sweep_deg < 1.0f;
     const float ts = 0.36f * s.span, tcr = (straight ? 0.25f : 0.32f) * ts,
                 tct = (straight ? 0.22f : 0.11f) * ts;
-    const float te = -h + 0.075f * L, le = te + tcr;
+    // T-tail: the stabiliser sits on top of the fin tip; otherwise it joins the rear fuselage.
+    const float le = st.ttail ? fin_tip_te + 0.75f * tcr : -h + 0.075f * L + tcr, te = le - tcr;
     const float tip_le = le - (ts / 2 - y_root) * tanf(rad(straight ? 5.0f : 33.0f));
-    const float zt = s.mount == Mount::Rear ? R + 0.95f * hf : 0.35f * R;
+    const float zt = st.ttail ? R + 0.95f * hf : 0.35f * R;
     for (int sg = -1; sg <= 1; sg += 2) {
       addHorizontal(static_cast<float>(sg), 0.3f * R, ts / 2, le, te, tip_le, tip_le - tct, zt, zt,
                     0.03f * D, 0.02f * D, pal.hull);

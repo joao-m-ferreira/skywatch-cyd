@@ -14,8 +14,9 @@ type, route, altitude, speed, distance, a compass, and a shaded 3D model in the 
 - **Per-plane details:** callsign, airline, type, altitude / FL, speed and track, distance and
   bearing, **route** (origin > destination), compass with the direction of travel.
 - **3D models** built on the board from real dimensions of ~110 types (A220–A380, 737–787, E-Jets, CRJ,
-  ATR, Dash 8, business jets, light aircraft, helicopters), with winglets, engines, windows, doors,
-  landing gear when low and slow, and the 747 hump / A380 double deck.
+  ATR, Dash 8, business jets, light aircraft, helicopters), adapted per family (nose and tail shape,
+  engine size, raked 777/787 tips, T-tails, winglet styles) with windows, doors, landing gear when low
+  and slow, and the 747 hump / A380 double deck.
 - **Liveries** for ~160 airlines: fuselage scheme, tail designs (disc, stripes, diagonal, checker,
   cross, faceted, flag stripes…), tinted fuselages, engine and winglet colours, plus airline-specific
   paint such as TAP's logo block, easyJet's orange crown and Etihad's gold facets.
