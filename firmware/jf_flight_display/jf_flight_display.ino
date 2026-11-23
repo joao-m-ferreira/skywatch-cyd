@@ -1086,7 +1086,10 @@ void loop() {
   if (netRestart) {  // a setting changed
     netRestart = false;
     message("Applying settings...", cfg.ssid, "Flights nearby", "", false);
-    WiFi.disconnect(true);
+    // Drop the connection but keep the radio and its network interface: switching the radio off here (disconnect(true))
+    // let a late packet from the old connection be freed through the destroyed interface, which crashed the board
+    // (found by scripts/emu-web.sh). connectWifi() below joins again with the current settings.
+    WiFi.disconnect(false);
     flightCount = 0;
     lastFetchOk = 0;
     lastGoodMs = now;
