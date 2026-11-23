@@ -69,12 +69,12 @@ class LGFX : public lgfx::LGFX_Device {
     c.pin_io3 = board::kLcdIo3;
     c.spi_3wire = false;
     bus_.config(c);
-    useVariant(4, false, false, 0, false);
+    useVariant(4, false, false, 0, false, 0, 0);
   }
 
   // panel 5 selects the V1 board (SH8601 + FT3168); anything else the V2 (CO5300 + CST820).
   // Inversion, red/blue order, backlight pin and touch bus do not apply to this board.
-  void useVariant(int panel, bool invert, bool rgb_swap, int, bool) {
+  void useVariant(int panel, bool invert, bool rgb_swap, int, bool, int, int) {
     if (panel == 5) {
       setupPanel(sh8601_);
       auto pc = sh8601_.config();
@@ -103,6 +103,8 @@ class LGFX : public lgfx::LGFX_Device {
   lgfx::Panel_ST7789 st7789_;
   lgfx::Panel_ST7796 st7796_;
   lgfx::Panel_ILI9488 ili9488_;
+  lgfx::Panel_SSD1306 ssd1306_;  // 0.96" OLED, 128x64, 1 bit, text only
+  lgfx::Bus_I2C i2c_;
   lgfx::Bus_SPI bus_;
   lgfx::Light_PWM light_;
   lgfx::Touch_XPT2046 touch_;
@@ -134,12 +136,37 @@ class LGFX : public lgfx::LGFX_Device {
     c.pin_miso = board::kTftMiso;
     c.pin_dc = board::kTftDc;
     bus_.config(c);
-    useVariant(0, false, false, board::kTftBacklight, false);
+    useVariant(0, false, false, board::kTftBacklight, false, 21, 22);
   }
 
   // Selects the panel (0 ILI9341, 1 ST7789, 2 ST7796, 3 ILI9488), colour inversion, red/blue order,
   // the backlight pin and where the touch controller sits. Call before init().
-  void useVariant(int panel, bool invert, bool rgb_swap, int bl_pin, bool touch_shared) {
+  void useVariant(int panel, bool invert, bool rgb_swap, int bl_pin, bool touch_shared, int sda, int scl) {
+    if (panel == 6) {  // 0.96" SSD1306 OLED on I2C: no backlight pin, no touch
+      auto bc = i2c_.config();
+      bc.i2c_port = 0;
+      bc.i2c_addr = 0x3C;
+      bc.freq_write = 400000;
+      bc.freq_read = 400000;
+      bc.pin_sda = sda;
+      bc.pin_scl = scl;
+      i2c_.config(bc);
+      auto pc = ssd1306_.config();
+      pc.pin_cs = -1;
+      pc.pin_rst = -1;
+      pc.panel_width = 128;
+      pc.panel_height = 64;
+      pc.memory_width = 128;
+      pc.memory_height = 64;
+      pc.offset_x = 0;
+      pc.offset_y = 0;
+      pc.invert = invert;
+      pc.readable = false;
+      ssd1306_.config(pc);
+      ssd1306_.setBus(&i2c_);
+      setPanel(&ssd1306_);
+      return;
+    }
     {
       auto c = light_.config();
       c.pin_bl = bl_pin;

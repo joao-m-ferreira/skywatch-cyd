@@ -19,7 +19,9 @@ struct Config {
   bool auto_loc;     // true: work out the location from the public IP (until lat/lon are set)
   bool tz_set;       // true once the user chose a timezone (never overridden by geo-IP)
   // Board variant (the "CYD" is sold with several panels). Changing these restarts the board.
-  int panel;         // 0 ILI9341 (single-USB ESP32-2432S028R), 1 ST7789 (two-USB), 2 ST7796 / 3 ILI9488 (3.5" 480x320, experimental)
+  int panel;         // 0 ILI9341 (single-USB ESP32-2432S028R), 1 ST7789 (two-USB), 2 ST7796 / 3 ILI9488 (3.5" 480x320, experimental), 6 SSD1306 0.96" OLED (text only)
+  int i2c_sda;       // I2C pins of a 0.96" SSD1306 OLED (panel 6)
+  int i2c_scl;
   int bl_pin;        // backlight GPIO (21 on the 2.8" boards, 27 on the 3.5" ones)
   bool touch_shared; // XPT2046 on the display's SPI bus (3.5" boards) instead of its own
   bool invert;       // colour inversion (some panels need it)

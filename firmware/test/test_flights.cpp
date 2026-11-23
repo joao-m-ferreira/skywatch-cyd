@@ -284,6 +284,14 @@ int main() {
     CHECK(jf::configCommand(&c, "set panel hx8357", r, sizeof r) == jf::CmdAction::None && c.panel == 0);
     CHECK(jf::configCommand(&c, "set panel st7796", r, sizeof r) == jf::CmdAction::Display && c.panel == 2);
     CHECK(jf::configCommand(&c, "set panel ili9488", r, sizeof r) == jf::CmdAction::Display && c.panel == 3);
+    CHECK(jf::configCommand(&c, "set panel ssd1306", r, sizeof r) == jf::CmdAction::Display && c.panel == 6);
+    CHECK(c.i2c_sda == 21 && c.i2c_scl == 22);
+    CHECK(jf::configCommand(&c, "set i2c 4 15", r, sizeof r) == jf::CmdAction::Display && c.i2c_sda == 4 && c.i2c_scl == 15);
+    CHECK(jf::configCommand(&c, "set i2c 4", r, sizeof r) == jf::CmdAction::None);
+    CHECK(jf::configCommand(&c, "set i2c 4 4", r, sizeof r) == jf::CmdAction::None);
+    CHECK(jf::configCommand(&c, "set i2c 4 99", r, sizeof r) == jf::CmdAction::None && c.i2c_scl == 15);
+    jf::configCommand(&c, "set i2c 21 22", r, sizeof r);
+    jf::configCommand(&c, "set panel ili9341", r, sizeof r);
     CHECK(jf::configCommand(&c, "set panel co5300", r, sizeof r) == jf::CmdAction::Display && c.panel == 4);
     CHECK(jf::configCommand(&c, "set panel sh8601", r, sizeof r) == jf::CmdAction::Display && c.panel == 5);
     jf::configCommand(&c, "set panel ili9341", r, sizeof r);
@@ -410,6 +418,30 @@ int main() {
     CHECK(f.model.x > f.info.x && f.call.x < f.model.x && f.divider_x < f.model.x);
     const jf::Layout n = jf::layoutFor(480, 320, jf::LayoutMode::Side);
     CHECK(n.model.x < n.info.x && n.call.x > n.model.x + n.model.w);
+  }
+
+  // Text-only display: every line fits 16 characters, whatever the aircraft
+  {
+    jf::Flight f = {};
+    snprintf(f.callsign, sizeof f.callsign, "TAP443");
+    snprintf(f.type, sizeof f.type, "A21N");
+    f.alt_ft = 6800; f.speed_kt = 259; f.track = 271; f.dist_km = 22.2f; f.bearing = 180;
+    jf::OledText o;
+    jf::formatOledText(f, "TAP Portugal", true, &o);
+    CHECK(strcmp(o.call, "TAP443") == 0 && strcmp(o.type, "A21N") == 0 && strcmp(o.airline, "TAP Portugal") == 0);
+    CHECK(strcmp(o.alt_speed, "FL068  259 kt") == 0);
+    CHECK(strcmp(o.dist_dir, "22.2 km S  W271") == 0);
+    f.alt_ft = 3500; f.speed_kt = 120; f.dist_km = 123.0f; f.bearing = 315; f.track = 305;
+    snprintf(f.callsign, sizeof f.callsign, "ABCDEFGH");
+    f.type[0] = '\0';
+    jf::formatOledText(f, nullptr, true, &o);
+    CHECK(strcmp(o.airline, "Operator ABC") == 0 && strcmp(o.type, "-") == 0);
+    CHECK(strcmp(o.alt_speed, "3500 ft  120 kt") == 0);
+    CHECK(strlen(o.dist_dir) <= 16 && strlen(o.alt_speed) <= 16 && strlen(o.airline) <= 16);
+    jf::formatOledText(f, nullptr, false, &o);
+    CHECK(strcmp(o.airline, "Private / other") == 0);
+    jf::formatOledText(f, "A very long airline name indeed", true, &o);
+    CHECK(strlen(o.airline) == 16);
   }
 
   if (failures == 0) printf("all firmware host tests passed\n");

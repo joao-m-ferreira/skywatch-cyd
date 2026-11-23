@@ -56,6 +56,7 @@ const char kHelp[] =
     "  set wake <minutes>     how long a touch wakes the screen at night, 1..120 (default 10)\n"
     "  set panel ili9341|st7789|st7796|ili9488  display controller (two-USB CYD: st7789; 3.5in: st7796/ili9488); restarts\n"
     "  (ESP32-S3 AMOLED board: set panel co5300 (V2, default) or sh8601 (V1))\n"
+    "  set i2c <sda> <scl>    OLED (ssd1306) I2C pins, e.g. set i2c 21 22; restarts\n"
     "  set backlight <gpio>   backlight pin (21 on 2.8in boards, 27 on 3.5in); restarts\n"
     "  set touch separate|shared  touch on its own SPI bus (2.8in) or the display's (3.5in); restarts\n"
     "  set invert on|off      colour inversion (colours look negative: toggle it); restarts\n"
@@ -89,6 +90,8 @@ void configDefaults(Config* c, const char* ssid, const char* pass, double lat, d
   c->tz_set = false;
   c->panel = 0;
   c->bl_pin = 21;
+  c->i2c_sda = 21;
+  c->i2c_scl = 22;
   c->touch_shared = false;
   c->invert = false;
   c->rgb_swap = false;
@@ -169,14 +172,14 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
     snprintf(reply, n,
              "ssid     %s\npass     %s\nlocation %s\nlat      %.5f\nlon      %.5f\nradius   %d km\n"
              "contact  %s\nnight    %s (%02d:00 - %02d:00)\nwake     %d min (touch at night)\ntz       %s\n"
-             "display  %s, invert %s, rgb %s, rotation %d, layout %s, led %d%%, backlight GPIO %d, touch %s\n",
+             "display  %s, invert %s, rgb %s, rotation %d, layout %s, led %d%%, backlight GPIO %d, touch %s, i2c %d/%d\n",
              c->ssid[0] ? c->ssid : "(not set)", c->pass[0] ? "****" : "(empty)",
              c->auto_loc ? "auto (geojs.io, from your public IP)" : "static", c->lat, c->lon,
              c->radius_km, c->contact, c->night_on ? "on" : "off", c->night_start, c->night_end,
-             c->wake_min, c->tz, c->panel == 1 ? "ST7789" : c->panel == 2 ? "ST7796" : c->panel == 3 ? "ILI9488" : c->panel == 4 ? "CO5300" : c->panel == 5 ? "SH8601" : "ILI9341", c->invert ? "on" : "off",
+             c->wake_min, c->tz, c->panel == 1 ? "ST7789" : c->panel == 2 ? "ST7796" : c->panel == 3 ? "ILI9488" : c->panel == 4 ? "CO5300" : c->panel == 5 ? "SH8601" : c->panel == 6 ? "SSD1306" : "ILI9341", c->invert ? "on" : "off",
              c->rgb_swap ? "swap" : "normal", c->rotation,
              c->layout == 1 ? "side" : c->layout == 2 ? "flip" : c->layout == 3 ? "stacked" : "auto", c->led_pct, c->bl_pin,
-             c->touch_shared ? "shared bus" : "own bus");
+             c->touch_shared ? "shared bus" : "own bus", c->i2c_sda, c->i2c_scl);
     return CmdAction::None;
   }
   if (strcasecmp(p, "reboot") == 0) {
@@ -295,10 +298,11 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
     else if (strcasecmp(value, "st7789") == 0) c->panel = 1;
     else if (strcasecmp(value, "st7796") == 0) c->panel = 2;
     else if (strcasecmp(value, "ili9488") == 0) c->panel = 3;
+    else if (strcasecmp(value, "ssd1306") == 0) c->panel = 6;  // 0.96" OLED, text only
     else if (strcasecmp(value, "co5300") == 0) c->panel = 4;  // ESP32-S3 AMOLED board, V2
     else if (strcasecmp(value, "sh8601") == 0) c->panel = 5;  // ESP32-S3 AMOLED board, V1
     else {
-      snprintf(reply, n, "error: panel is ili9341, st7789, st7796, ili9488, co5300 or sh8601\n");
+      snprintf(reply, n, "error: panel is ili9341, st7789, st7796, ili9488, ssd1306, co5300 or sh8601\n");
       return CmdAction::None;
     }
     display_change = true;
@@ -324,6 +328,20 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
       return CmdAction::None;
     }
     c->rotation = a;
+    display_change = true;
+  } else if (strcasecmp(key, "i2c") == 0) {
+    char* sp = strchr(value, ' ');
+    if (sp == nullptr) {
+      snprintf(reply, n, "error: use 'set i2c <sda> <scl>', e.g. set i2c 21 22\n");
+      return CmdAction::None;
+    }
+    *sp = '\0';
+    if (!parseInt(value, 0, 39, &a) || !parseInt(trim(sp + 1), 0, 39, &b) || a == b) {
+      snprintf(reply, n, "error: two different GPIO numbers 0..39\n");
+      return CmdAction::None;
+    }
+    c->i2c_sda = a;
+    c->i2c_scl = b;
     display_change = true;
   } else if (strcasecmp(key, "backlight") == 0) {
     if (!parseInt(value, 0, 39, &a)) {

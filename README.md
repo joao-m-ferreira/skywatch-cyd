@@ -55,6 +55,8 @@ there is one pair of files per board, named `skywatch-cyd-<version>-<board>-merg
 | 2.8" CYD with two USB ports (ST7789) | `cyd-st7789` | ESP32 | not tested on hardware |
 | 3.5" "big CYD" (ST7796, 480x320) | `cyd35` | ESP32 | experimental |
 | Waveshare ESP32-S3-Touch-AMOLED-1.8 | `amoled18` | ESP32-S3 | emulator only |
+| Any ESP32 + 0.96" SSD1306 OLED module (text only, I2C on GPIO 21/22) | `oled96` | ESP32 | not tested |
+| ESP32 board with the 0.96" OLED built in (Wemos/TTGO style, GPIO 5/4) | `oled96-onboard` | ESP32 | experimental |
 
 1. Download the `-merged.bin` for your board (and `SHA256SUMS` to check it:
    `shasum -a 256 -c SHA256SUMS`).
@@ -105,6 +107,14 @@ Settings are saved in the board's flash. The build-time defaults come from `secr
 | `safe on\|off` | force / leave safe mode |
 | `night test` | try night mode for 20 s (not saved) |
 | `reboot` / `factory` | restart / forget saved settings |
+
+## The 0.96" OLED version
+The same firmware also runs on a tiny **128x64 monochrome OLED** (SSD1306, I2C). It shows the same facts as
+text, with no 3D model, photo, compass, LED or touch: callsign and type, the airline, altitude and speed,
+and the distance with the bearing and the plane's heading. The planes rotate by themselves; the board's
+**BOOT** button shows the next one. The wiring is `VCC`, `GND`, `SDA` (GPIO 21) and `SCL` (GPIO 22); for
+other pins use `set i2c <sda> <scl>`, and `set panel ssd1306` selects the display on a board flashed with
+another build. Not tested on hardware.
 
 ## Board variants and troubleshooting
 The "Cheap Yellow Display" is sold with the same pinout but different panels. The default matches the

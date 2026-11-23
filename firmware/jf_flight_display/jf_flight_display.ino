@@ -62,6 +62,8 @@ int crashCount = 0;
 bool safeMode = false;
 bool stableMarked = false;
 bool forceRedraw = false;
+// 0.96" SSD1306 text-only OLED (panel 6): no 3D model, photo, LED or touch; the BOOT button changes plane.
+bool isOled() { return cfg.panel == 6; }
 int lowBlockCount = 0;
 
 const char* resetName(esp_reset_reason_t r) {
@@ -108,6 +110,12 @@ void loadConfig() {
 #ifdef SKYWATCH_TOUCH_SHARED
   cfg.touch_shared = SKYWATCH_TOUCH_SHARED != 0;
 #endif
+#ifdef SKYWATCH_I2C_SDA
+  cfg.i2c_sda = SKYWATCH_I2C_SDA;
+#endif
+#ifdef SKYWATCH_I2C_SCL
+  cfg.i2c_scl = SKYWATCH_I2C_SCL;
+#endif
   prefs.begin("skywatch", true);
   if (prefs.isKey("ssid")) prefs.getString("ssid", cfg.ssid, sizeof cfg.ssid);
   if (prefs.isKey("pass")) prefs.getString("pass", cfg.pass, sizeof cfg.pass);
@@ -125,6 +133,8 @@ void loadConfig() {
   cfg.panel = prefs.getInt("panel", cfg.panel);
   cfg.bl_pin = prefs.getInt("blpin", cfg.bl_pin);
   cfg.touch_shared = prefs.getBool("tshared", cfg.touch_shared);
+  cfg.i2c_sda = prefs.getInt("sda", cfg.i2c_sda);
+  cfg.i2c_scl = prefs.getInt("scl", cfg.i2c_scl);
   cfg.invert = prefs.getBool("invert", cfg.invert);
   cfg.rgb_swap = prefs.getBool("rgbswap", cfg.rgb_swap);
   cfg.rotation = prefs.getInt("rot", cfg.rotation);
@@ -151,6 +161,8 @@ void saveConfig() {
   prefs.putInt("panel", cfg.panel);
   prefs.putInt("blpin", cfg.bl_pin);
   prefs.putBool("tshared", cfg.touch_shared);
+  prefs.putInt("sda", cfg.i2c_sda);
+  prefs.putInt("scl", cfg.i2c_scl);
   prefs.putBool("invert", cfg.invert);
   prefs.putBool("rgbswap", cfg.rgb_swap);
   prefs.putInt("rot", cfg.rotation);
@@ -412,6 +424,12 @@ void ledTask(void*) {
 
 // ---------------------------------------------------------------- screen
 
+// One place for the status screens: the colour plate, or a short text on the OLED.
+void message(const char* msg, const char* detail, const char* left, const char* right, bool error) {
+  if (isOled()) drawOledMessage(tft, msg, detail);
+  else drawPlateMessage(tft, msg, detail, left, right, error, cfg.layout);
+}
+
 void drawScreen() {
   char left[40], right[24];
   snprintf(right, sizeof right, "%d/%d", selected + 1, flightCount);
@@ -430,12 +448,16 @@ void drawScreen() {
   if (flightCount == 0) {
     right[0] = '\0';
     ledForPlane(nullptr);
-    drawPlateMessage(tft, fetchFailed ? "Fetch failed" : "No aircraft in range",
-                     fetchFailed ? lastError : "", left, right, fetchFailed, cfg.layout);
+    message(fetchFailed ? "Fetch failed" : "No aircraft in range",
+                     fetchFailed ? lastError : "", left, right, fetchFailed);
     return;
   }
   if (selected >= flightCount) selected = 0;
   ledForPlane(&flights[selected]);
+  if (isOled()) {
+    drawPlateOled(tft, flights[selected]);
+    return;
+  }
   drawPlate(tft, flights[selected], selected, flightCount, left, right,
             safeMode ? nullptr : jf::photoFor(flights[selected].reg), safeMode, cfg.layout);
 }
@@ -479,6 +501,11 @@ void printStatus() {
 // Colour test card: tells the panel variants apart. Left to right: red, green, blue, white, black,
 // yellow, cyan, magenta; below, a grey ramp.
 void drawTestCard() {
+  if (isOled()) {
+    drawOledMessage(tft, "Display test", "128x64 OLED works");
+    Serial.println("test card: an OLED is monochrome; if you see this text the display works.");
+    return;
+  }
   const int w = board::kScreenW, h = board::kScreenH;
   const uint16_t cols[8] = {tft.color565(255, 0, 0),   tft.color565(0, 255, 0),   tft.color565(0, 0, 255),
                             tft.color565(255, 255, 255), tft.color565(0, 0, 0),    tft.color565(255, 255, 0),
@@ -679,11 +706,12 @@ void setup() {
   const bool forcedSafe = prefs.getBool("safe", false);
   prefs.end();
   safeMode = forcedSafe || jf::configSafeMode(crashCount);
-  tft.useVariant(cfg.panel, cfg.invert, cfg.rgb_swap, cfg.bl_pin, cfg.touch_shared);
+  tft.useVariant(cfg.panel, cfg.invert, cfg.rgb_swap, cfg.bl_pin, cfg.touch_shared, cfg.i2c_sda, cfg.i2c_scl);
+  if (isOled()) pinMode(0, INPUT_PULLUP);  // BOOT button
   tft.init();
   tft.setRotation(cfg.rotation);  // 320x240 landscape (3 = upside down)
-  setupLed();
-  if (board::kHasLed) xTaskCreatePinnedToCore(ledTask, "led", 3072, nullptr, 1, nullptr, 0);  // animates the LED independently
+  if (board::kHasLed && !isOled()) setupLed();  // the OLED boards use GPIOs 4/16/17 for I2C or nothing: leave them alone
+  if (board::kHasLed && !isOled()) xTaskCreatePinnedToCore(ledTask, "led", 3072, nullptr, 1, nullptr, 0);  // animates the LED independently
 
   // Hardware watchdog for the main loop: restart if it hangs for 90 s.
   const esp_task_wdt_config_t wdt = {.timeout_ms = kWatchdogMs, .idle_core_mask = 0, .trigger_panic = true};
@@ -694,7 +722,7 @@ void setup() {
   Serial.printf("reset reason: %s, crashes in a row: %d%s\n", resetName(resetReason), crashCount,
                 safeMode ? " - SAFE MODE" : "");
   if (jf::configWifiReady(cfg)) {
-    drawPlateMessage(tft, "Connecting...", cfg.ssid, "Flights nearby", "", false);
+    message("Connecting...", cfg.ssid, "Flights nearby", "", false);
     if (connectWifi()) {
       startClock();
       if (cfg.auto_loc) geoDone = geoLocate();
@@ -710,7 +738,7 @@ void loop() {
   if (!jf::configWifiReady(cfg)) {  // first run: nothing to connect to yet
     if (!setupScreenShown || netRestart) {
       ledForPlane(nullptr);
-      drawPlateMessage(tft, "WiFi not set up", "USB serial 115200: type 'help'", "Flights nearby",
+      message("WiFi not set up", "USB serial 115200: type 'help'", "Flights nearby",
                        "", true);
       setupScreenShown = true;
       netRestart = false;
@@ -723,7 +751,7 @@ void loop() {
 
   if (netRestart) {  // a setting changed
     netRestart = false;
-    drawPlateMessage(tft, "Applying settings...", cfg.ssid, "Flights nearby", "", false);
+    message("Applying settings...", cfg.ssid, "Flights nearby", "", false);
     WiFi.disconnect(true);
     flightCount = 0;
     lastFetchOk = 0;
@@ -797,6 +825,12 @@ void loop() {
     if (nightMode) wakeUntil = now + wakeMs();  // keep the screen on while it is being used
     delay(300);  // debounce
   }
+  if (isOled() && flightCount > 0 && digitalRead(0) == LOW) {  // BOOT button: next plane
+    selected = (selected + 1) % flightCount;
+    lastRotate = now;
+    redraw = true;
+    delay(300);
+  }
   if (flightCount > 1 && now - lastRotate >= kRotateMs) {  // carousel
     selected = (selected + 1) % flightCount;
     lastRotate = now;
@@ -813,7 +847,7 @@ void loop() {
     Serial.printf("drawn in %u ms, free heap %u\n", static_cast<unsigned>(millis() - t0),
                   static_cast<unsigned>(ESP.getFreeHeap()));
     // Photos: fetch the current plane's first (redraw when it arrives), then the next one's.
-    if (flightCount > 0 && !safeMode) {
+    if (flightCount > 0 && !safeMode && !isOled()) {
       esp_task_wdt_reset();
       if (jf::routePrefetch(flights[selected].callsign)) drawScreen();
       esp_task_wdt_reset();

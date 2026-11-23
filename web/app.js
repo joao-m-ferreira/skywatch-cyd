@@ -61,7 +61,8 @@
       const actions = el("div", { class: "actions" });
       actions.append(
         installButton(`manifests/${b.id}.json`, "Install", false, b.id, b.version, "install"),
-        installButton(`manifests/${b.id}-update.json`, "Update (keep my settings)", true, b.id, b.version, "update"));
+        installButton(`manifests/${b.id}-update.json`, "Update (keep my settings)", true, b.id, b.version, "update"),
+        el("a", { class: "btn ghost", href: `firmware/${b.version}/skywatch-cyd-${b.version}-${b.id}-merged.bin`, download: "", text: "Download firmware" }));
       if (b.status !== "verified") {
         actions.hidden = true;
         const box = el("input", { type: "checkbox", id: `ack-${b.id}` });

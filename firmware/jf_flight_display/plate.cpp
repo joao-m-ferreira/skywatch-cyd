@@ -285,3 +285,44 @@ void drawPlateMessage(lgfx::LovyanGFX& g, const char* msg, const char* detail,
   g.setTextSize(1.0f);
   g.endWrite();
 }
+
+// ---- 128x64 monochrome OLED: four text rows, the same data as the colour plate ----
+void drawPlateOled(lgfx::LovyanGFX& g, const jf::Flight& f) {
+  const jf::Airline* al = jf::airlineFor(f.callsign);
+  jf::OledText t;
+  jf::formatOledText(f, al != nullptr ? al->name : nullptr, jf::looksLikeAirlineCallsign(f.callsign), &t);
+  g.startWrite();
+  g.fillScreen(0);
+  g.setTextColor(0xFFFF, 0);  // white on black: the panel has one bit per pixel
+  g.setTextSize(1.0f);
+  g.setFont(&lgfx::fonts::FreeSansBold9pt7b);
+  g.setTextDatum(lgfx::top_left);
+  g.drawString(t.call, 0, 0);
+  g.setFont(&lgfx::fonts::Font2);
+  g.setTextDatum(lgfx::top_right);
+  g.drawString(t.type, g.width() - 1, 0);
+  g.setTextDatum(lgfx::top_left);
+  g.drawString(t.airline, 0, 16);
+  g.drawString(t.alt_speed, 0, 32);
+  g.drawString(t.dist_dir, 0, 48);
+  g.endWrite();
+  g.display();  // a 1-bit OLED is drawn into a buffer and sent here
+}
+
+void drawOledMessage(lgfx::LovyanGFX& g, const char* msg, const char* detail) {
+  g.startWrite();
+  g.fillScreen(0);
+  g.setTextColor(0xFFFF, 0);
+  g.setTextSize(1.0f);
+  g.setTextDatum(lgfx::middle_center);
+  g.setFont(strlen(msg) <= 15 ? static_cast<const lgfx::IFont*>(&lgfx::fonts::Font2) : static_cast<const lgfx::IFont*>(&lgfx::fonts::Font0));
+  g.drawString(msg, g.width() / 2, g.height() / 2 - 10);
+  if (detail != nullptr && detail[0] != '\0') {
+    char buf[22];
+    snprintf(buf, sizeof buf, "%.21s", detail);
+    g.setFont(&lgfx::fonts::Font0);
+    g.drawString(buf, g.width() / 2, g.height() / 2 + 12);
+  }
+  g.endWrite();
+  g.display();
+}

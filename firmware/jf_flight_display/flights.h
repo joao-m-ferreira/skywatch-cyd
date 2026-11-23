@@ -46,6 +46,17 @@ const char* compass(int bearing);
 // "12.3 km" under 100 km, else "123 km".
 void formatDistance(float km, char* buf, size_t n);
 
+// The text of a 128x64 text-only display (0.96" OLED): every field is at most 16 characters.
+struct OledText {
+  char call[12];       // "TAP443"
+  char type[8];        // "A21N"
+  char airline[17];    // "TAP Portugal", "Operator ABC" or "Private / other"
+  char alt_speed[18];  // "FL068  259 kt", "3500 ft  120 kt"
+  char dist_dir[18];   // "22.2 km S  W271": distance, bearing from you, heading of the plane
+};
+// airline_name may be null; looks_like_airline says whether the callsign starts with an operator code.
+void formatOledText(const Flight& f, const char* airline_name, bool looks_like_airline, OledText* out);
+
 // LDR reading (0..4095, higher = brighter) to backlight duty 90..255.
 int backlightFor(int ldr_raw);
 

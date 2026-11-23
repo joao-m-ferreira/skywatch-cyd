@@ -59,6 +59,36 @@
       "title": "Waveshare AMOLED 1.8\"",
       "tagline": "A small, very sharp AMOLED screen on an ESP32-S3 board.",
       "tab": "AMOLED 1.8\""
+    },
+    {
+      "id": "oled96",
+      "name": "ESP32 with a 0.96\" SSD1306 OLED module (128x64, I2C on GPIO 21 and 22)",
+      "short": "ESP32 + 0.96\" OLED",
+      "title": "ESP32 + 0.96\" OLED module",
+      "tagline": "A tiny text-only display on any ESP32 board: callsign, airline, altitude, speed and distance.",
+      "tab": "OLED 0.96\"",
+      "chipFamily": "ESP32",
+      "fqbn": "esp32:esp32:esp32:PartitionScheme=huge_app",
+      "bootloaderOffset": 4096,
+      "flashBytes": 4194304,
+      "flags": "-DSKYWATCH_PANEL=6 -DSKYWATCH_I2C_SDA=21 -DSKYWATCH_I2C_SCL=22",
+      "status": "untested",
+      "notes": "Text only (no 3D model, no photo, no touch: the BOOT button shows the next plane). Not tested on hardware or in the emulator."
+    },
+    {
+      "id": "oled96-onboard",
+      "name": "ESP32 board with the 0.96\" OLED built in (Wemos LOLIN32 / TTGO style, I2C on GPIO 5 and 4)",
+      "short": "ESP32 with built-in OLED",
+      "title": "ESP32 with a built-in 0.96\" OLED",
+      "tagline": "The same text-only display on boards that have the OLED on the PCB (Wemos / TTGO style).",
+      "tab": "OLED built-in",
+      "chipFamily": "ESP32",
+      "fqbn": "esp32:esp32:esp32:PartitionScheme=huge_app",
+      "bootloaderOffset": 4096,
+      "flashBytes": 4194304,
+      "flags": "-DSKYWATCH_PANEL=6 -DSKYWATCH_I2C_SDA=5 -DSKYWATCH_I2C_SCL=4",
+      "status": "experimental",
+      "notes": "Pins are the common ones for these boards; boards differ (use 'set i2c <sda> <scl>' if the screen stays blank). Never tested."
     }
   ]
 }

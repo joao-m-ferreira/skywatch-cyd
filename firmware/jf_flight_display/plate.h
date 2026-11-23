@@ -16,3 +16,7 @@ void drawPlate(lgfx::LovyanGFX& gfx, const jf::Flight& f, int index, int count,
 // Message plate when there is nothing to show (error=true draws it in red).
 void drawPlateMessage(lgfx::LovyanGFX& gfx, const char* msg, const char* detail,
                       const char* header_left, const char* header_right, bool error, int layout_mode = 0);
+
+// Text-only screens for a 128x64 monochrome OLED (no 3D model, no photo, no compass).
+void drawPlateOled(lgfx::LovyanGFX& gfx, const jf::Flight& f);
+void drawOledMessage(lgfx::LovyanGFX& gfx, const char* msg, const char* detail);

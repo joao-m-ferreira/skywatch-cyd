@@ -180,11 +180,69 @@ def amoled_svg():
     return svg(w, h, body, "Waveshare AMOLED board showing a flight")
 
 
+def oled_screen(call="TAP443", typ="A21N", airline="TAP Portugal", alt="FL068  259 kt", dist="22.2 km S  W271"):
+    """The 128x64 one-bit screen of the text-only OLED version (the same four rows the firmware draws)."""
+    im = Image.new("1", (128, 64), 0)
+    d = ImageDraw.Draw(im)
+    bold, reg = font("bold", 13), font("reg", 14)
+    d.text((0, 0), call, font=bold, fill=1)
+    d.text((127, 1), typ, font=reg, fill=1, anchor="ra")
+    for y, text in ((16, airline), (32, alt), (48, dist)):
+        d.text((0, y), text, font=reg, fill=1)
+    return im
+
+
+def oled_glass(im, k=4):
+    """The one-bit screen scaled up with visible pixel gaps, in the cool white of an OLED."""
+    big = Image.new("RGB", (im.width * k, im.height * k), (3, 5, 10))
+    px = big.load()
+    src = im.load()
+    for y in range(im.height):
+        for x in range(im.width):
+            if src[x, y]:
+                for dy in range(k - 1):
+                    for dx in range(k - 1):
+                        px[x * k + dx, y * k + dy] = (226, 240, 255)
+    return big
+
+
+def oled_svg(onboard=False):
+    w, h = 380, 300
+    glass = oled_glass(oled_screen())
+    gw, gh = 256, 128
+    body = ""
+    if onboard:  # an ESP32 board with the OLED built in (Wemos / TTGO style)
+        body += '<g filter="url(#s)"><rect x="25" y="20" width="330" height="250" rx="12" fill="#1c2b22"/>'
+        for x, y in ((39, 34), (341, 34), (39, 256), (341, 256)):
+            body += hole(x, y)
+        body += f'<rect x="50" y="48" width="{gw + 12}" height="{gh + 12}" rx="6" fill="#090a0d"/>'
+        body += f'<image x="56" y="54" width="{gw}" height="{gh}" preserveAspectRatio="none" xlink:href="data:image/png;base64,{png_b64(glass)}"/></g>'
+        body += '<rect x="106" y="262" width="168" height="14" rx="3" fill="#2d3b31"/>'
+        body += usb(172, 268, 36, 22)
+        body += '<circle cx="318" cy="222" r="9" fill="#b9b9b9" stroke="#777"/><circle cx="318" cy="190" r="9" fill="#b9b9b9" stroke="#777"/>'
+    else:  # the usual 4-pin 0.96" module
+        body += '<g filter="url(#s)"><rect x="25" y="26" width="330" height="250" rx="12" fill="#1c4d9e"/>'
+        for x, y in ((39, 40), (341, 40), (39, 262), (341, 262)):
+            body += hole(x, y)
+        body += f'<rect x="56" y="86" width="{gw + 12}" height="{gh + 12}" rx="6" fill="#090a0d"/>'
+        body += f'<image x="62" y="92" width="{gw}" height="{gh}" preserveAspectRatio="none" xlink:href="data:image/png;base64,{png_b64(glass)}"/></g>'
+        for i, label in enumerate(("GND", "VCC", "SCL", "SDA")):
+            x = 134 + i * 36
+            body += f'<rect x="{x - 4}" y="40" width="8" height="28" fill="#d9b44a"/><text x="{x}" y="82" font-size="9" fill="#dfe9ff" text-anchor="middle" font-family="sans-serif">{label}</text>'
+    return svg(w, h, body, "0.96 inch OLED showing a flight")
+
+
 BOARDS = {"cyd": cyd_svg("cyd"), "cyd-st7789": cyd_svg("cyd-st7789", two_usb=True),
-          "cyd35": cyd_svg("cyd35", big=True), "amoled18": amoled_svg()}
+          "cyd35": cyd_svg("cyd35", big=True), "amoled18": amoled_svg(),
+          "oled96": oled_svg(), "oled96-onboard": oled_svg(onboard=True)}
 os.makedirs(OUT, exist_ok=True)
 for name, content in BOARDS.items():
     path = os.path.join(OUT, f"board-{name}.svg")
     with open(path, "w") as f:
         f.write(content)
     print(path, len(content) // 1024, "KB")
+
+
+preview = oled_glass(oled_screen(), 6)
+preview.save(os.path.join(ROOT, "build", "oled-screen.png"))
+print("screen preview:", os.path.join(ROOT, "build", "oled-screen.png"))

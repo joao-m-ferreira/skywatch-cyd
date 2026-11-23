@@ -5,6 +5,10 @@ Releases follow [Semantic Versioning](https://semver.org/). Each release has not
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-23
+- A text-only version for boards with a 0.96" SSD1306 OLED (`oled96`, `oled96-onboard`): the same firmware without the 3D model, `set panel ssd1306`, `set i2c <sda> <scl>`, BOOT button for the next plane.
+- The web portal has a Download firmware button next to Install for every board.
+
 ## [0.3.0] - 2026-11-23
 - Release builds for every hardware model (`firmware/boards.json`): CYD 2.8" (tested), CYD two-USB, 3.5" CYD and the Waveshare S3 AMOLED, each with its panel settings built in and an honest test status.
 - A web portal (`web/`) that flashes a board from the browser and sets the WiFi, location, search distance and night mode over USB; published by GitHub Pages. Optional Cloudflare Worker to count flashes.

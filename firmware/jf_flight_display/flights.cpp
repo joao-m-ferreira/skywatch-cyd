@@ -167,4 +167,17 @@ int backlightFor(int ldr_raw) {
   return 90 + (ldr_raw * 165) / 4095;  // never below ~35%: a dark room must not look like "off"
 }
 
+void formatOledText(const Flight& f, const char* airline_name, bool looks_like_airline, OledText* out) {
+  snprintf(out->call, sizeof out->call, "%s", f.callsign);
+  snprintf(out->type, sizeof out->type, "%s", f.type[0] ? f.type : "-");
+  if (airline_name != nullptr) snprintf(out->airline, sizeof out->airline, "%.16s", airline_name);
+  else if (looks_like_airline) snprintf(out->airline, sizeof out->airline, "Operator %.3s", f.callsign);
+  else snprintf(out->airline, sizeof out->airline, "Private / other");
+  char alt[16], dist[16];
+  formatAltitude(f.alt_ft, alt, sizeof alt);
+  snprintf(out->alt_speed, sizeof out->alt_speed, "%s  %d kt", alt, f.speed_kt);
+  formatDistance(f.dist_km, dist, sizeof dist);
+  snprintf(out->dist_dir, sizeof out->dist_dir, "%s %s  %s%03d", dist, compass(f.bearing), compass(f.track), f.track);
+}
+
 }  // namespace jf
