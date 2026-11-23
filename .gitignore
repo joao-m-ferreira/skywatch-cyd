@@ -7,3 +7,4 @@ firmware/test/test_flights
 .env
 references/photos/*.jpg
 references/pasted/
+references/types/*.jpg

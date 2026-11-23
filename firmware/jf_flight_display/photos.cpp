@@ -12,7 +12,7 @@
 namespace jf {
 namespace {
 
-constexpr size_t kSlots = 4;      // photos kept in RAM
+constexpr size_t kSlots = 3;      // photos kept in RAM (the 3D mesh buffers need the memory)
 constexpr size_t kMaxJpg = 24000;  // thumbnails are ~5-15 KB
 Photo slots[kSlots];
 size_t nextSlot = 0;

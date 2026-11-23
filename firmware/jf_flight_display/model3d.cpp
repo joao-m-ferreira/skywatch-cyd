@@ -379,7 +379,7 @@ static Winglet wingletFor(const char* t, const AircraftSpec& s) {
 // Per-family shape adaptations on top of the dimensions table: nose and tail-cone shape, engine
 // size and how tightly they tuck under the wing, fin size, raked wingtips, T-tails.
 struct Style {
-  float nose_pow = 2.0f;   // nose profile: higher = more pointed
+  float nose_pow = 1.9f;   // nose profile: 2.0 hemisphere; lower = more pointed, higher = blunter
   float nose_len = 1.0f;   // nose cone length factor
   float tail_len = 1.0f;   // tail cone length factor
   float fin = 1.0f;        // vertical fin height factor
@@ -401,27 +401,29 @@ static Style styleFor(const char* t, const AircraftSpec& s) {
   if (any({"A318", "A319", "A320", "A321", "A19N", "A20N", "A21N"})) {
     st.nose_pow = 1.9f; st.tail_len = 0.95f;
   } else if (any({"BCS"})) {  // A220: short blunt nose, big fin and engines
-    st.nose_pow = 1.6f; st.nose_len = 0.9f; st.tail_len = 0.9f; st.fin = 1.12f; st.eng_w = 1.15f;
+    st.nose_pow = 2.4f; st.nose_len = 0.9f; st.tail_len = 0.9f; st.fin = 1.12f; st.eng_w = 1.15f;
   } else if (any({"B73", "B37", "B38", "B39", "B3X"})) {  // 737: slim engines tucked right up to the wing
-    st.nose_pow = 2.1f; st.tail_len = 0.9f; st.fin = 0.95f; st.eng_w = 0.92f; st.tuck = 0.28f;
+    st.nose_pow = 1.95f; st.tail_len = 0.9f; st.fin = 0.95f; st.eng_w = 0.92f; st.tuck = 0.28f;
   } else if (any({"B75"})) {
-    st.nose_pow = 2.4f; st.nose_len = 1.1f; st.tail_len = 1.05f; st.eng_w = 1.05f;
+    st.nose_pow = 1.7f; st.nose_len = 1.1f; st.tail_len = 1.05f; st.eng_w = 1.05f;
   } else if (any({"B77"})) {  // 777: huge engines, raked tips
-    st.nose_pow = 2.2f; st.tail_len = 1.1f; st.fin = 0.95f; st.eng_w = 1.22f; st.eng_len = 1.1f; st.rake = true;
+    st.nose_pow = 1.9f; st.tail_len = 1.1f; st.fin = 0.95f; st.eng_w = 1.22f; st.eng_len = 1.1f; st.rake = true;
   } else if (any({"B78"})) {  // 787: long pointed nose, long nacelles, raked tips
-    st.nose_pow = 2.7f; st.nose_len = 1.12f; st.tail_len = 1.12f; st.fin = 0.95f; st.eng_len = 1.25f; st.rake = true;
+    st.nose_pow = 1.65f; st.nose_len = 1.1f; st.tail_len = 1.12f; st.fin = 0.95f; st.eng_len = 1.25f; st.rake = true;
+  } else if (any({"A30", "A31", "A33"})) {  // A300/A310/A330: big engines close to the fuselage
+    st.nose_pow = 1.9f; st.eng_w = 1.12f; st.tail_len = 1.05f;
   } else if (any({"A35"})) {  // A350: pointed nose, big fin, long nacelles
-    st.nose_pow = 2.7f; st.nose_len = 1.12f; st.tail_len = 1.1f; st.fin = 1.05f; st.eng_len = 1.2f;
+    st.nose_pow = 1.65f; st.nose_len = 1.1f; st.tail_len = 1.1f; st.fin = 1.05f; st.eng_len = 1.2f;
   } else if (any({"B74"})) {
     st.fin = 1.05f;
   } else if (any({"A388"})) {
-    st.nose_pow = 1.8f;
+    st.nose_pow = 2.1f;
   } else if (any({"E17", "E75", "E19", "E29"})) {
-    st.nose_pow = 1.8f; st.nose_len = 0.95f; st.eng_w = 0.95f;
+    st.nose_pow = 2.1f; st.nose_len = 0.95f; st.eng_w = 0.95f;
   } else if (s.mount == Mount::Prop) {
-    st.nose_pow = 1.7f;
+    st.nose_pow = 2.4f;
   } else if (s.mount == Mount::Rear && s.engines > 0 && s.length < 40.0f) {  // business jets, regional jets
-    st.nose_pow = 2.3f; st.nose_len = 1.1f;
+    st.nose_pow = 1.7f; st.nose_len = 1.1f;
   }
   return st;
 }
@@ -447,7 +449,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   const float nose_u[kNose] = {0.0f, 0.03f, 0.09f, 0.18f, 0.32f, 0.52f, 0.76f, 1.0f};
   for (int i = 0; i < kNose; ++i) {
     const float u = nose_u[i];
-    const float r = fmaxf(0.015f * R, R * (1.0f - powf(1.0f - u, st.nose_pow)));  // cone-like nose, rounded tip
+    const float r = fmaxf(0.015f * R, R * sqrtf(1.0f - powf(1.0f - u, st.nose_pow)));  // rounded nose: 2.0 is a hemisphere, lower = slimmer
     rg[nr++] = {h - nc * u, -0.12f * R * (1.0f - u), r, r};
   }
   constexpr int kCabin = 14;
@@ -560,6 +562,14 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
     addQuad(c0, c1, c2, c3, pal.dark);
   }
 
+  // Wing-body fairing under the wing root (airliners with under-wing engines).
+  if (s.mount == Mount::UnderWing && D >= 3.0f) {
+    addCyl(x_le - 0.08f * rc, x_te + 0.10f * rc, 0, -0.68f * R, 0.36f * R, 0.28f * R, pal.belly, pal.belly);
+  }
+  // APU exhaust at the very end of the tail cone.
+  if (s.mount != Mount::Prop && D >= 3.0f) {
+    addCyl(-h + 0.012f * L, -h - 0.012f * L, 0, 0.5f * R, 0.13f * R, 0.10f * R, pal.dark, pal.dark);
+  }
   for (int sg = -1; sg <= 1; sg += 2) {
     if (st.rake) {  // main panel to 84% span, then a more swept, tapered outer panel
       const float yr = 0.84f * b, f = (yr - y_root) / (b - y_root);
