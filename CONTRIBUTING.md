@@ -30,5 +30,8 @@ CI runs lint, test, build and the docs check on every push and pull request.
 - Hardware honesty: say what has actually been tested on a real board, what only in the emulator, and
   what not at all (see the board table in the README).
 
+## Licence
+By contributing you agree that your work is released under the [MIT License](LICENSE).
+
 ## Releases
 Versions follow Semantic Versioning. See the Releases section of the [README](README.md).

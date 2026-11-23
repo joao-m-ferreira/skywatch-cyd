@@ -185,7 +185,7 @@ firmware reports its version at boot and in `status`.
 ## Data sources and credits
 - Aircraft positions: [adsb.fi](https://adsb.fi) open data (personal, non-commercial use).
 - Routes: [adsbdb](https://www.adsbdb.com) (community data: can be wrong or missing).
-- Photos: [planespotters.net](https://www.planespotters.net), credited on screen to each photographer.
+- Photos (optional, fetched while the board runs): the [planespotters.net](https://www.planespotters.net) photo API. Each photo belongs to its photographer, who is credited on screen; no photos are stored in this repository.
 - Location: [geojs.io](https://www.geojs.io) (sends your public IP; use a static location to avoid it).
 - Inspired by [suvl/ledmatrix](https://github.com/suvl/ledmatrix) and
   [dmellok/tesserae-widget-overhead](https://github.com/dmellok/tesserae-widget-overhead); no code was
@@ -194,4 +194,10 @@ firmware reports its version at boot and in `status`.
 ## Limits
 No airline logos or lettering (trademarks, and the screen is too small), no AI-painted images, no
 weather. Liveries and colours are approximations. The optional Go service in `service/` is a simple
-proxy the firmware does not use. No licence has been chosen yet.
+proxy the firmware does not use.
+
+## Licence
+The code in this repository is released under the [MIT License](LICENSE). The data it shows has its own
+terms: adsb.fi open data is for personal, non-commercial use, and the photos belong to their photographers
+(see the credits above). The firmware builds on LovyanGFX (FreeBSD licence), ArduinoJson (MIT) and
+TJpg_Decoder; the web portal loads ESP Web Tools (Apache-2.0).
