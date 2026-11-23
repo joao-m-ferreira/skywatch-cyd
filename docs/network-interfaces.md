@@ -234,6 +234,10 @@ connected. The web page, API and MCP are not served while it is open.
 | `setup` | open the setup access point |
 | `status`, `show`, `version`, `update` | state, settings, firmware version, check for a newer release |
 
+## 3D carousel (ESP32 builds)
+The web page opens with one plane at a time, turning in 3D in its airline's livery, painted in your browser from `/api/model`. It moves to the next plane every 8 seconds; the arrows and dots pick one by hand (and pause the rotation of planes for 20 seconds).
+`GET /api/model?c=<callsign>` returns the mesh the display itself draws, as binary (little-endian): `u16` vertices, `u16` triangles, `f32` length in metres; then the vertices (3 x `i16`, centimetres: x forward, y right, z up); then the triangles (3 x `u16` vertex index, 3 x `u8` colour, 3 x `i8` overlay direction). It follows `set webauth` like the rest of the page, is about 10-19 KB, and answers 404 for a callsign that is not in the list. The ESP8266 build has no carousel (it keeps the table) and no `/api/model`.
+
 ## ESP8266
 The same code serves the ESP8266 build (`esp8266-oled`), within an 80 KB RAM budget:
 - Request bodies over **2 KB** are refused (`413`; the ESP32 allows 8 KB), and a tool result that would not fit a 4 KB buffer answers

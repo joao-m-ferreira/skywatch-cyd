@@ -113,6 +113,18 @@ r=$(req "$URL/api/flights")
 check "the plane list's JSON needs no login by default (200)"          "echo \"\$r\" | head -1 | grep -q 200"
 r=$(req "$URL/settings")
 check "with no web login the settings page opens without a token (200)" "echo \"\$r\" | head -1 | grep -q 200"
+# the 3D carousel: the page carries it, and /api/model streams a mesh whose size matches its own header
+r=$(req "$URL/")
+check "the page carries the 3D carousel"                               "echo \"\$r\" | grep -q 'id=cv' && echo \"\$r\" | grep -q '/api/model'"
+CS=$(curl -s -m 15 "$URL/api/flights" | python3 -I -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["callsign"] if d else "")')
+curl -s -m 20 -o "$D/model.bin" -w '%{http_code}' "$URL/api/model?c=$CS" > "$D/model.code" || true
+model_ok() { [ "$(cat "$D/model.code")" = 200 ] && python3 -I -c '
+import struct,sys
+b=open(sys.argv[1],"rb").read(); nv,nt,ln=struct.unpack("<HHf",b[:8])
+sys.exit(0 if nv>50 and nt>50 and ln>5 and len(b)==8+nv*6+nt*12 else 1)' "$D/model.bin"; }
+check "/api/model streams a mesh whose size matches its header"        "model_ok"
+check "/api/model refuses an unknown callsign (404)"                   "[ \"\$(code \"\$URL/api/model?c=NOPE\")\" = 404 ]"
+[ -n "${EMU_HOLD:-}" ] && { echo "holding: open $URL/ (Ctrl-C to stop)"; sleep "$EMU_HOLD"; }
 check "'set webauth on' (typed at an emulated time) puts the login on the plane list" "waitfor view_closed"
 check "'set mcpauth on' (typed at an emulated time) makes /mcp need a token (401)" "waitfor mcp_needs_token"
 r=$(req "$URL/mcp/server-card")

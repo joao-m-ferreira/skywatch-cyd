@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "airline.h"
 #include "silhouette.h"
 
 namespace jf {
@@ -16,6 +17,40 @@ static Mesh& gm() {
   static Mesh* p = static_cast<Mesh*>(calloc(1, sizeof(Mesh)));
   if (p == nullptr) abort();  // out of memory at first use: restart rather than draw garbage
   return *p;
+}
+
+Palette paletteFor(const char* callsign, int alt_ft, int speed_kt) {
+  const Airline* al = airlineFor(callsign);
+  const Livery lv = liveryFor(al);
+  Palette pal = {{252, 250, 242}, {222, 222, 228}, {120, 130, 150}, {90, 95, 105},
+                 {150, 190, 220}, {44, 32, 22},    {255, 255, 255}, {205, 205, 210},
+                 {120, 130, 150}, lv.nose_red,     0,       lv.tail, lv.body,
+                 {120, 130, 150}};
+  if (al != nullptr) {
+    pal.primary = {al->r1, al->g1, al->b1};
+    pal.secondary = {al->r2, al->g2, al->b2};
+    pal.tip = pal.primary;
+  }
+  if (lv.tail == kTailTap) pal.tip = pal.secondary;  // TAP: red winglets
+  if (lv.tail == kTailFlag) pal.tip = {250, 250, 250};  // Emirates: white wingtips
+  switch (lv.fin_base) {
+    case kFinWhite: pal.fin = {250, 250, 250}; break;
+    case kFinSecondary: pal.fin = pal.secondary; break;
+    default: pal.fin = pal.primary; break;
+  }
+  pal.motif = lv.fin_base != kFinPrimary ? pal.primary : lv.white_motif ? Rgb{255, 255, 255} : pal.secondary;
+  if (lv.engines == 1) pal.engine = pal.primary;
+  if (lv.engines == 2) pal.engine = pal.secondary;
+  switch (lv.hull) {  // tinted fuselages
+    case kHullPearl: pal.hull = {214, 214, 212}; break;
+    case kHullChampagne: pal.hull = {240, 230, 206}; break;
+    case kHullSky: pal.hull = {150, 200, 235}; break;
+    default: break;
+  }
+  pal.belly = {static_cast<uint8_t>(pal.hull.r * 0.88f), static_cast<uint8_t>(pal.hull.g * 0.88f),
+               static_cast<uint8_t>(pal.hull.b * 0.9f)};
+  pal.gear = (alt_ft < 1500 && speed_kt < 200) ? 1 : 0;
+  return pal;
 }
 
 static float rad(float d) { return d * static_cast<float>(M_PI) / 180.0f; }

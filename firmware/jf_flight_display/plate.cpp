@@ -178,40 +178,9 @@ void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
   // The aircraft as a small shaded 3D model (dark outline), nose pointing the way it is flying, in
   // the airline's livery.
   const jf::Airline* al = jf::airlineFor(f.callsign);
-  const jf::Livery lv = jf::liveryFor(al);
-  uint16_t pri = g.color565(120, 130, 150), sec = g.color565(90, 95, 105);
-  jf::Palette pal = {{252, 250, 242}, {222, 222, 228}, {120, 130, 150}, {90, 95, 105},
-                     {150, 190, 220}, {44, 32, 22},    {255, 255, 255}, {205, 205, 210},
-                     {120, 130, 150}, lv.nose_red,     0,       lv.tail, lv.body,
-                     {120, 130, 150}};
-  if (al != nullptr) {
-    pal.primary = {al->r1, al->g1, al->b1};
-    pal.secondary = {al->r2, al->g2, al->b2};
-    pal.tip = pal.primary;
-    pri = g.color565(al->r1, al->g1, al->b1);
-    sec = g.color565(al->r2, al->g2, al->b2);
-  }
-  if (lv.tail == jf::kTailTap) pal.tip = pal.secondary;  // TAP: red winglets
-  if (lv.tail == jf::kTailFlag) pal.tip = {250, 250, 250};  // Emirates: white wingtips
-  switch (lv.fin_base) {
-    case jf::kFinWhite: pal.fin = {250, 250, 250}; break;
-    case jf::kFinSecondary: pal.fin = pal.secondary; break;
-    default: pal.fin = pal.primary; break;
-  }
-  pal.motif = lv.fin_base != jf::kFinPrimary ? pal.primary
-              : lv.white_motif               ? jf::Rgb{255, 255, 255}
-                                             : pal.secondary;
-  if (lv.engines == 1) pal.engine = pal.primary;
-  if (lv.engines == 2) pal.engine = pal.secondary;
-  switch (lv.hull) {  // tinted fuselages
-    case jf::kHullPearl: pal.hull = {214, 214, 212}; break;
-    case jf::kHullChampagne: pal.hull = {240, 230, 206}; break;
-    case jf::kHullSky: pal.hull = {150, 200, 235}; break;
-    default: break;
-  }
-  pal.belly = {static_cast<uint8_t>(pal.hull.r * 0.88f), static_cast<uint8_t>(pal.hull.g * 0.88f),
-               static_cast<uint8_t>(pal.hull.b * 0.9f)};
-  pal.gear = (f.alt_ft < 1500 && f.speed_kt < 200) ? 1 : 0;  // landing gear down when low and slow
+  const jf::Palette pal = jf::paletteFor(f.callsign, f.alt_ft, f.speed_kt);
+  uint16_t pri = g.color565(pal.primary.r, pal.primary.g, pal.primary.b);
+  uint16_t sec = g.color565(pal.secondary.r, pal.secondary.g, pal.secondary.b);
   const bool right = f.track > 0 && f.track < 180;  // eastbound: nose to the right
   bool shown_photo = false;
   if (!lite && photo != nullptr && photo->jpg != nullptr) shown_photo = drawPhoto(g, *photo, c, L);

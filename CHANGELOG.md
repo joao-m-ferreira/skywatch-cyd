@@ -4,6 +4,7 @@ Releases follow [Semantic Versioning](https://semver.org/). Each release has not
 `docs/releases/<version>.md`, and its binaries are attached to the GitHub release.
 
 ## [Unreleased]
+- **3D carousel on the web page** (ESP32 builds): one plane at a time turning in 3D in its airline's livery, next plane every 8 s, arrows and dots to pick one. The model is the display's own mesh, streamed by the new `GET /api/model?c=<callsign>` and drawn by a small script in the page; the livery colours now come from one shared function (`paletteFor`) so the screen and the page always match.
 - **Web login is off by default:** the plane list and `/api/*` need no login on your network; `set webauth on` (or the settings form) brings it back. The settings page follows the same switch: no login at all by default, the token for everything with `set webauth on`. Boards that already had a token keep their login after the update.
 - `set debug on|off` (default off): the web address line at start-up is only printed with debug on.
 - **ESP8266:** web page and MCP are opt-in again and mDNS is gone on this chip (it needed 4.7 KB), smaller buffers, and recovery from "Not enough memory": the web server steps aside for a fetch, the fetch retries sooner, and a board stuck short of memory restarts.
