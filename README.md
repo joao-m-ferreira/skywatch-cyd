@@ -17,7 +17,7 @@ Every aircraft type gets its own shape and every airline its own paint:
 <sub>Twelve airlines on twelve aircraft types, rendered on the host from the same 3D code that runs on the board, so the shapes and liveries match; the real screen is 320×240 and looks smaller and blockier. Regenerate with `python3 scripts/readme_image.py`.</sub>
 
 ## Features
-- **Carousel** of the nearest aircraft (default 40 km), touch to skip ahead. 20 s data refresh.
+- **Carousel** of the nearest aircraft (default 40 km, at most 10: `set max`), touch to skip ahead. 6 s per plane (`set plane <seconds>`). 20 s data refresh.
 - **Per-plane details:** callsign, airline, type, altitude / FL, speed and track, distance and
   bearing, **route** (origin > destination), compass with the direction of travel.
 - **3D models** built on the board from real dimensions of ~110 types (A220–A380, 737–787, E-Jets, CRJ,
@@ -32,6 +32,10 @@ Every aircraft type gets its own shape and every airline its own paint:
 - **RGB LED** in the airline's colour; airlines with two real colours (Ryanair, TAP…) hold and fade
   between them.
 - **Night mode:** screen and LED off on a schedule, touch to wake for 10 min (`set wake <minutes>`). `flights` over serial lists the detected aircraft.
+- **WiFi setup mode:** with no WiFi saved (or none reachable for 3 minutes) the board opens its own WiFi and a settings page, with a QR code and the password on its screen.
+- **Web page and MCP server** on the board's own address, on by default, protected by an access token, each with its own off switch; the MCP tools are read-only (see [Web page and MCP server](#web-page-and-mcp-server)).
+- **Boards:** ESP32 (touchscreens, small colour screens, text OLEDs, an AMOLED) and the ESP8266 with a text OLED.
+- **Small screens:** the TTGO T-Display (240x135) and the M5StickC (160x80) show the plane and one value at a time (distance, altitude, speed).
 - **Location from your IP** (city level) or a fixed one.
 - **Robust:** WiFi watchdog, hardware watchdog, restarts if stuck, out of memory, or once a day.
 
@@ -54,9 +58,12 @@ there is one pair of files per board, named `skywatch-cyd-<version>-<board>-merg
 | ESP32-2432S028R "Cheap Yellow Display" 2.8" (ILI9341, one USB port) | `cyd` | ESP32 | tested on real hardware |
 | 2.8" CYD with two USB ports (ST7789) | `cyd-st7789` | ESP32 | not tested on hardware |
 | 3.5" "big CYD" (ST7796, 480x320) | `cyd35` | ESP32 | experimental |
+| LilyGO TTGO T-Display (1.14" ST7789, 240x135) | `ttgo-tdisplay` | ESP32 | tested on real hardware |
+| M5StickC (original, 0.96" 160x80) | `m5stickc` | ESP32 | tested on real hardware |
 | Waveshare ESP32-S3-Touch-AMOLED-1.8 | `amoled18` | ESP32-S3 | emulator only |
 | Any ESP32 + 0.96" SSD1306 OLED module (text only, I2C on GPIO 21/22) | `oled96` | ESP32 | not tested |
 | ESP32 board with the 0.96" OLED built in (Wemos/TTGO style, GPIO 5/4) | `oled96-onboard` | ESP32 | experimental |
+| ESP8266 board with the 0.96" OLED built in (ESP-12 style, GPIO 14/12) | `esp8266-oled` | ESP8266 | experimental (tested on one board) |
 
 1. Download the `-merged.bin` for your board (and `SHA256SUMS` to check it:
    `shasum -a 256 -c SHA256SUMS`).
@@ -86,6 +93,8 @@ there is one pair of files per board, named `skywatch-cyd-<version>-<board>-merg
 The screen shows the planes around you within about a minute. The location comes from your public IP;
 use `set location static <lat> <lon>` for an exact one.
 
+You can also skip the serial terminal: a board with no WiFi saved starts its own [setup WiFi](#wifi-setup-mode).
+
 ## Settings (USB serial, 115200 baud)
 Settings are saved in the board's flash. The build-time defaults come from `secrets.h`.
 
@@ -96,16 +105,24 @@ Settings are saved in the board's flash. The build-time defaults come from `secr
 | `set location auto` | locate from your public IP via geojs.io (default) |
 | `set location static <lat> <lon>` | fixed position (also `set lat` / `set lon`) |
 | `set radius <km>` | search radius, 1–250 |
+| `set max <planes>` | most planes shown, nearest first, 1–20 (default 10) |
+| `set plane <seconds>` | how long each plane stays on screen, 3–120 (default 6); small screens split it between distance, altitude and speed |
 | `set contact <email>` | contact sent to planespotters.net (required by their API) |
 | `set night <from> <to>` / `set night off` | screen off between these hours, e.g. `set night 23 7` |
 | `set tz <posix tz>` | clock timezone (found from your location when auto) |
-| `set panel ili9341\|st7789\|st7796\|ili9488` / `set invert on\|off` / `set rgb normal\|swap` / `set rotation 0..3` | board variant: panel, colour inversion, red/blue order, orientation (restarts to apply) |
+| `set panel ili9341\|st7789\|st7796\|ili9488\|tdisplay\|m5stickc` / `set invert on\|off` / `set rgb normal\|swap` / `set rotation 0..3` | board variant: panel, colour inversion, red/blue order, orientation (restarts to apply) |
 | `set backlight <gpio>` / `set touch separate\|shared` | 3.5" boards: backlight pin (27) and touch on the display's SPI bus (restarts to apply) |
 | `set layout auto\|side\|flip\|stacked` | plane left / plane right / plane on top, text below (auto by panel shape) |
 | `display test` | colour test card for 15 s, to identify your panel variant |
 | `set led <0..100>` | RGB LED brightness percent |
 | `safe on\|off` | force / leave safe mode |
 | `night test` | try night mode for 20 s (not saved) |
+| `set web on\|off` / `set mcp on\|off` | the web page / the MCP server on the board's address (default on; both need the access token) |
+| `set mcpauth on\|off` | require the token in a header for `/mcp` (`Authorization: Bearer <token>` or `X-API-Key: <token>`); default off |
+| `set advertise on\|off` | announce the board on the network (`skywatch.local`, `_mcp._tcp`) and serve the public Server Card (default on) |
+| `token` / `token new` | show the access token / make a new one |
+| `setup` | open the WiFi setup page now (see below) |
+| `version` / `update` | firmware version, build date and board / check GitHub for a newer release (needs WiFi) |
 | `reboot` / `factory` | restart / forget saved settings |
 
 ## The 0.96" OLED version
@@ -115,6 +132,75 @@ and the distance with the bearing and the plane's heading. The planes rotate by 
 **BOOT** button shows the next one. The wiring is `VCC`, `GND`, `SDA` (GPIO 21) and `SCL` (GPIO 22); for
 other pins use `set i2c <sda> <scl>`, and `set panel ssd1306` selects the display on a board flashed with
 another build. Not tested on hardware.
+
+## WiFi setup mode
+A board with no WiFi saved, or one that cannot reach its WiFi for 3 minutes (new router, changed password), opens
+its **own WiFi** named `skywatch-XXXX` with a random one-time password, and shows on its screen how to join it:
+a QR code (phones join by scanning it), the network name, the password and the address `192.168.4.1`. A phone
+opens the settings page by itself; if not, browse to `http://192.168.4.1/`. There you choose your WiFi, location,
+radius, seconds per plane and night mode; every value is checked before it is saved. The board keeps trying the
+saved WiFi meanwhile, and leaves setup mode on its own once it is connected. To start it by hand: `setup` over
+serial, or hold the board's button for 3 seconds on the T-Display, M5StickC and OLED boards.
+
+## Web page and MCP server
+Both are **on by default** and each has its own switch (and a third one for the announcement, below): `set web off`,
+`set mcp off` and `set advertise off` over serial, or the three selects in the setup page and the tick boxes in the
+portal's setup form (More settings). The first time either is on, the board makes an **access token** and prints it
+(`token` shows it again, `token new` replaces it). The web page, its JSON and the settings page **always** need the
+token. The MCP endpoint needs it only when you switch header authentication on with `set mcpauth on` (**off by
+default**): until then anyone on your network can read the planes and the board's status through MCP. That is all
+they can do, because the tools are read-only. The connection is plain HTTP, so treat the board as a local-network
+service, never an internet one (do not forward its port). To close the port completely, switch both off.
+
+| Address | What | Needs |
+|---|---|---|
+| `http://skywatch.local/` | the planes (refreshing) and a link to the settings | web on; user `skywatch`, the token as password |
+| `/api/flights`, `/api/status` | the same data as JSON | web on, same login |
+| `/settings` | the setup form, to change WiFi, location, radius... | web on, same login |
+| `/mcp` | MCP over HTTP (JSON-RPC 2.0): `initialize`, `tools/list`, `tools/call` | MCP on; with `set mcpauth on`, the header `Authorization: Bearer <token>` or `X-API-Key: <token>` |
+
+The MCP tools are **read-only**: `get_nearby_flights` (optional `limit`), `get_current_plane` and `get_status`. Nothing
+can change a setting through MCP, and `get_status` never includes the WiFi password, the token or your position.
+Browser requests to `/mcp` (anything with an `Origin` header) are refused, and five wrong tokens in a row lock the
+board out for a minute (a request with no token at all does not count). Point an MCP client at the URL; with header authentication on, give
+it the header too. A client that takes a JSON configuration looks like this (the exact keys differ between clients):
+
+```json
+{ "mcpServers": { "skywatch": { "url": "http://skywatch.local/mcp", "headers": { "Authorization": "Bearer <token>" } } } }
+```
+
+Leave `headers` out while header authentication is off (the default).
+
+**Discovery** (`set advertise on`, the default; `set advertise off` hides the board, which restarts once to withdraw its name and then answers on its IP address only). The board announces itself over mDNS as `skywatch.local` and, with MCP on, over DNS-SD as `_mcp._tcp` (port 80; TXT `path=/mcp`,
+`card=/mcp/server-card`, `auth=bearer` or `none`, `version`), so `dns-sd -B _mcp._tcp` (macOS) or `avahi-browse _mcp._tcp`
+(Linux) finds it. It also serves a public MCP **Server Card** at `/mcp/server-card` (media type
+`application/mcp-server-card+json`: name, version, the endpoint, the headers it needs when `mcpauth` is on, and the protocol
+version) and an AI Catalog at `/.well-known/ai-catalog.json` that points to it. Both are public by design and hold
+no secret: never the token, never your WiFi or position. The `_mcp._tcp` service name is a convention, not a standard,
+and current MCP clients do not browse for servers themselves: use the address
+above, or a script that browses and writes your client's config.
+
+This part is tested in the esp32sim emulator (`scripts/emu-web.sh`: about 40 checks over the board's forwarded port, including a run longer than 10 minutes) and
+by host tests, not yet on a real board.
+
+## Small colour screens
+The **TTGO T-Display** (`set panel tdisplay`, 240x135) and the **M5StickC** (`set panel m5stickc`, 160x80) have
+no room for the full plate, so they show the 3D plane (or photo), the compass and heading, the callsign and type,
+and **one value at a time**, rotating through distance, altitude and speed; each plane starts at distance. The time
+per plane (`set plane`) is split between the three. Neither board has a touch screen: the button (T-Display: left
+button, GPIO 0; M5StickC: button A, GPIO 37) shows the next plane. The M5StickC's screen is powered through its
+AXP192 chip, which the firmware sets up; the C Plus and Plus2 have other screens and are not supported yet.
+
+## ESP8266 with an OLED
+The small **ESP8266** boards with a built-in 0.96" OLED (ESP-12 style, the screen on SDA GPIO 14 and SCL GPIO 12) run a
+separate, smaller build (`esp8266-oled`) that shares the flight parsing, the OLED text and the serial commands with the
+ESP32 build (`firmware/skywatch_esp8266/`; `scripts/stage_esp8266.sh` gathers the shared files next to it, because the
+Arduino tools compile a copy of the sketch folder). It shows the same four text rows and the FLASH button shows the next
+plane; the serial settings (`set ssid`, `set radius`, `set plane`, `set night`...) and the browser setup in the portal
+work as on the other boards. It has **no 3D model, photos, WiFi setup page, web page or MCP server**: the chip has about
+80 KB of RAM, and the TLS connection to the data source needs a 8 KB receive buffer plus about 8 KB more (the servers
+refuse small TLS records), leaving roughly 10 KB free while it fetches. The image is one file flashed at `0x0`, so
+"install" and "update" are the same file, and the saved settings survive both. Other pins: `set i2c <sda> <scl>`.
 
 ## Board variants and troubleshooting
 The "Cheap Yellow Display" is sold with the same pinout but different panels. The default matches the

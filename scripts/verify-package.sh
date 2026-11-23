@@ -6,13 +6,21 @@ cd "$(dirname "$0")/.."
 D="${1:-dist}"
 magic() { dd if="$1" bs=1 skip="$2" count=1 2>/dev/null | xxd -p; }
 checked=0
-while IFS=$'\t' read -r id boot flash; do
+while IFS=$'\t' read -r id boot flash sketch; do
   fw=$(ls "$D"/skywatch-cyd-*-"$id"-firmware.bin 2>/dev/null | head -n 1 || true)
   mg=$(ls "$D"/skywatch-cyd-*-"$id"-merged.bin 2>/dev/null | head -n 1 || true)
   [ -n "$fw" ] || [ -n "$mg" ] || continue
   [ -n "$fw" ] && [ -n "$mg" ] || { echo "$id: need both the firmware and the merged image in $D" >&2; exit 1; }
   [ "$(magic "$fw" 0)" = "e9" ] || { echo "$fw lacks the ESP image magic 0xE9" >&2; exit 1; }
   [ "$(wc -c <"$fw")" -gt 100000 ] || { echo "$fw suspiciously small" >&2; exit 1; }
+  if [ "$sketch" = esp8266 ]; then  # one image at 0x0: the two files are the same bytes
+    cmp "$fw" "$mg" >/dev/null || { echo "$id: the ESP8266 install and update images differ" >&2; exit 1; }
+    ver=$(basename "$fw" | sed -E "s/^skywatch-cyd-(.*)-$id-firmware\\.bin\$/\\1/")
+    grep -aq "$ver" "$fw" || { echo "version $ver is not stamped in $fw" >&2; exit 1; }
+    echo "package verified: $id ($ver)"
+    checked=$((checked + 1))
+    continue
+  fi
   [ "$(wc -c <"$mg")" -eq "$flash" ] || { echo "$mg is not a $flash byte flash image" >&2; exit 1; }
   [ "$(magic "$mg" "$boot")" = "e9" ] || { echo "$mg: no bootloader at $boot" >&2; exit 1; }
   [ "$(magic "$mg" 65536)" = "e9" ] || { echo "$mg: no application at 0x10000" >&2; exit 1; }
@@ -28,6 +36,6 @@ while IFS=$'\t' read -r id boot flash; do
 done < <(python3 -c '
 import json
 for b in json.load(open("firmware/boards.json"))["boards"]:
-    print("\t".join([b["id"], str(b["bootloaderOffset"]), str(b["flashBytes"])]))
+    print("\t".join([b["id"], str(b["bootloaderOffset"]), str(b["flashBytes"]), b.get("sketch", "esp32")]))
 ')
 [ "$checked" -gt 0 ] || { echo "no known board files in $D" >&2; exit 1; }

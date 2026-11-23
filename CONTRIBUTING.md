@@ -13,6 +13,8 @@ together) and [docs/core-beliefs.md](docs/core-beliefs.md) (the engineering prin
 | format | `scripts/format.sh` |
 | build | `scripts/build.sh` (service binary + ESP32 and ESP32-S3 compiles) |
 | run the optional service | `cd service && go run .` |
+| ESP8266 build | `scripts/stage_esp8266.sh` gathers the sketch and the code it shares with the ESP32 build; `scripts/build.sh` compiles it (the emulator cannot run an ESP8266: test on a board) |
+| emulator test of the web page and MCP server | `scripts/emu-web.sh` (reaches the emulated board's port 80 through the emulator's port forwarding; needs internet) |
 | emulator smoke test | `scripts/emu-smoke.sh` (boots the real firmware in [esp32sim](https://github.com/mikroverk/esp32sim); needs internet) |
 | docs check | `python3 scripts/check_docs.py` |
 | release files | `VERSION=x.y.z scripts/package.sh` then `scripts/verify-package.sh dist` |

@@ -14,6 +14,13 @@ struct Config {
   bool night_on;
   int night_start;   // hour 0..23 the screen goes off
   int night_end;     // hour 0..23 it comes back
+  bool web_on;       // serve the dashboard and settings page on the board's address (needs the token); default on
+  bool mcp_on;       // serve the MCP endpoint (/mcp, read-only tools; needs the token); default on
+  bool mcp_auth;     // require the access token in an HTTP header (Authorization: Bearer, or X-API-Key) for /mcp; default off
+  bool adv_on;       // announce the board on the network (mDNS name and _mcp._tcp) and serve the public Server Card; default on
+  char token[33];    // access token for both; generated when either is first switched on
+  int max_planes;    // most planes shown, nearest first (1..kMaxPlanesLimit)
+  int plane_sec;     // seconds each plane stays on screen (carousel); compact screens split it between their data fields
   int wake_min;      // minutes a touch wakes the screen during the night window
   char tz[48];       // POSIX TZ string for the clock
   bool auto_loc;     // true: work out the location from the public IP (until lat/lon are set)
@@ -31,9 +38,14 @@ struct Config {
   int led_pct;       // RGB LED brightness 0..100 (lower it if a weak USB port browns out)
 };
 
-enum class CmdAction { None, Changed, Display, Redraw, Reboot, Factory };  // Display: saved, then restart; Redraw: saved, redraw now
+enum class CmdAction { None, Changed, Display, Redraw, Reboot, Factory, Setup, Version, Update, Token, NewToken };  // Display: saved, then restart; Redraw: saved, redraw now; Setup: open the WiFi setup access point; Token: print the access token; NewToken: make a new one
+
+constexpr int kMaxPlanesLimit = 20;  // keep equal to kMaxFlights (flights.h)
 
 constexpr const char* kDefaultTz = "WET0WEST,M3.5.0/1,M10.5.0";  // Lisbon
+
+// A short name of a panel setting ("ILI9341", "M5StickC", ...) for status output.
+const char* panelName(int panel);
 
 // Fills `c` with the build-time defaults (from secrets.h).
 void configDefaults(Config* c, const char* ssid, const char* pass, double lat, double lon,

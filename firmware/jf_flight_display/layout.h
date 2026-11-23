@@ -6,6 +6,9 @@
 //                     other; Side = plane left, as originally designed; SideFlip = plane right).
 //   Stacked         : canvas width 320, height grows with the panel (plane on top, text below);
 //                     suits portrait and square panels.
+//   Compact         : short wide panels (under 170 px high, e.g. the 240x135 TTGO T-Display): the canvas is the
+//                     screen in pixels (s = 1) so text stays readable, the header is dropped, and the
+//                     text column shows one data field at a time that the caller rotates (`page`).
 // Auto picks Stacked for portrait and near-square panels and Side otherwise.
 #pragma once
 #include <math.h>
@@ -42,6 +45,9 @@ struct Layout {
   Pt altitude = {186, 112}, speed = {186, 150}, distance = {186, 188};
   Pt header_left = {14, 11}, header_right = {306, 11};  // header texts (right one right-aligned)
   int header_rule_y = 30;
+  bool compact = false;                // short panel: pixel-exact layout, one rotating data field
+  bool micro = false;                  // very short panel (under 100 px, e.g. 160x80): no dots, rule or airline name
+  Pt data = {0, 0};                    // compact only: the rotating field (label above its value)
 
   int X(int v) const { return static_cast<int>(lroundf(static_cast<float>(v) * s)); }
   int Y(int v) const { return static_cast<int>(lroundf(static_cast<float>(v) * s)); }
@@ -64,6 +70,65 @@ inline Layout layoutFor(int w, int h, LayoutMode want = LayoutMode::Auto) {
   if (m == LayoutMode::Stacked && aspect >= 1.2f) m = LayoutMode::Side;
   if ((m == LayoutMode::Side || m == LayoutMode::SideFlip) && aspect < 1.2f) m = LayoutMode::Stacked;
   l.mode = m;
+
+  if ((m == LayoutMode::Side || m == LayoutMode::SideFlip) && h < 170) {
+    l.compact = true;
+    l.s = 1.0f;
+    l.cw = w;
+    l.ch = h;
+    constexpr int kInfoW = 97, kPad = 9;
+    const bool flip = m == LayoutMode::SideFlip;
+    const int info_x = flip ? kPad : w - kPad - kInfoW;
+    const int mod_x = flip ? info_x + kInfoW + 6 : kPad;
+    const int mod_w = w - 2 * kPad - kInfoW - 6;
+    l.model = {mod_x, 20, mod_w, h - 20 - 41};
+    l.dots = {mod_x + mod_w / 2, 14};
+    l.compass = {mod_x + 12, h - 25};
+    l.heading = {mod_x + 28, h - 25};
+    l.info = {info_x, kPad, kInfoW, h - 2 * kPad};
+    l.divider_vertical = true;
+    l.divider_x = flip ? info_x + kInfoW + 3 : info_x - 3;
+    l.divider_y = kPad;
+    l.divider_len = h - 2 * kPad;
+    const int tx = info_x + 1;
+    l.call = {tx, 10};
+    l.type = {tx, 30};
+    l.airline = {tx, 48};
+    l.bars = {tx, 64};
+    l.rule = {tx, 67};
+    l.rule_w = kInfoW - 2;
+    l.data = {tx, 72};
+    l.header_left = {kPad, 8};
+    l.header_right = {w - kPad, 8};
+    l.header_rule_y = 26;
+    if (h < 100) {  // 160x80: a thin frame, the plane and compass on the left, callsign / type / one field on the right
+      l.micro = true;
+      constexpr int kInfoWm = 73, kPadm = 4;
+      const int ix = flip ? kPadm : w - kPadm - kInfoWm;
+      const int mx = flip ? ix + kInfoWm + kPadm : kPadm;
+      const int mw = w - 2 * kPadm - kInfoWm - kPadm;
+      const int tx2 = ix + 1;
+      l.model = {mx, 4, mw, 46};
+      l.dots = {mx + mw / 2, 2};
+      l.compass = {mx + 11, h - 14};
+      l.heading = {mx + 23, h - 14};
+      l.info = {ix, 3, kInfoWm, h - 6};
+      l.divider_x = flip ? ix + kInfoWm + 2 : ix - 3;
+      l.divider_y = kPadm;
+      l.divider_len = h - 2 * kPadm;
+      l.call = {tx2, 3};
+      l.type = {tx2, 21};
+      l.airline = {tx2, 21};  // not drawn
+      l.bars = {tx2, 40};
+      l.rule = {tx2, 44};     // not drawn
+      l.rule_w = kInfoWm - 1;
+      l.data = {tx2, 44};
+      l.header_left = {5, 5};
+      l.header_right = {w - 5, 5};
+      l.header_rule_y = 23;
+    }
+    return l;
+  }
 
   if (m == LayoutMode::Stacked) {
     l.s = static_cast<float>(w) / 320.0f;
