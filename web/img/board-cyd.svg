@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 250" role="img" aria-label="ESP32 touchscreen board">
+  <defs><filter id="s" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="6" stdDeviation="6" flood-opacity=".25"/></filter></defs>
+  <g filter="url(#s)"><rect x="20" y="10" width="340" height="230" rx="12" fill="#f0b81c"/><circle cx="32" cy="22" r="5" fill="#f6f0e0" stroke="#8a6a10" stroke-width="1.5"/><circle cx="348" cy="22" r="5" fill="#f6f0e0" stroke="#8a6a10" stroke-width="1.5"/><circle cx="32" cy="228" r="5" fill="#f6f0e0" stroke="#8a6a10" stroke-width="1.5"/><circle cx="348" cy="228" r="5" fill="#f6f0e0" stroke="#8a6a10" stroke-width="1.5"/><rect x="50" y="22" width="278" height="206" rx="6" fill="#16120d"/><rect x="58" y="30" width="262" height="190" fill="#f4ead0"/>
+  <rect x="61" y="33" width="256" height="184" fill="none" stroke="#2c2016" stroke-width="1"/>
+  <g transform="translate(131.36 125.0) scale(0.793939393939394)" stroke="#2c2016" stroke-width="1.2" stroke-linejoin="round">
+    <path d="M-8 -1 L-30 -24 L-18 -24 L12 -3Z" fill="#e4e2de"/>
+    <path d="M-8 1 L-30 24 L-18 24 L12 3Z" fill="#cfcdc9"/>
+    <path d="M-36 0 L-44 -15 L-36 -15 L-27 -2Z" fill="#96281e"/>
+    <ellipse cx="0" cy="0" rx="40" ry="7" fill="#fbfaf6"/>
+    <path d="M30 -5 Q40 -4 40 0 Q40 2 33 3Z" fill="#9fc2dd" stroke="none"/>
+  </g>
+  <line x1="204.72000000000003" y1="40" x2="204.72000000000003" y2="210" stroke="#b0a082" stroke-width="1"/>
+  <rect x="212.72000000000003" y="44" width="74.67" height="9" rx="2" fill="#2c2016"/>
+  <rect x="212.72000000000003" y="59" width="39.824000000000005" height="6" rx="2" fill="#96281e"/>
+  <rect x="212.72000000000003" y="76" width="34.846" height="4" rx="2" fill="#b0a082"/>
+  <rect x="212.72000000000003" y="82" width="79.64800000000001" height="6" rx="2" fill="#2c2016"/>
+  <rect x="212.72000000000003" y="93" width="34.846" height="4" rx="2" fill="#b0a082"/>
+  <rect x="212.72000000000003" y="99" width="67.7008" height="6" rx="2" fill="#2c2016"/>
+  <rect x="212.72000000000003" y="110" width="34.846" height="4" rx="2" fill="#b0a082"/>
+  <rect x="212.72000000000003" y="116" width="55.753600000000006" height="6" rx="2" fill="#2c2016"/></g><rect x="10" y="111" width="26" height="28" rx="2" fill="#bdbdbd" stroke="#777" stroke-width="1"/><rect x="13" y="114" width="20" height="22" rx="1" fill="#555"/><circle cx="338" cy="105" r="6" fill="#2a2a2a"/><circle cx="338" cy="129" r="6" fill="#2a2a2a"/>
+</svg>

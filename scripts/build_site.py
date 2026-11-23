@@ -95,7 +95,7 @@ def build(dist: Path, out: Path, boards: list[dict], web: Path = ROOT / "web") -
         (out / "manifests" / f"{b['id']}.json").write_text(json.dumps(full, indent=2) + "\n")
         (out / "manifests" / f"{b['id']}-update.json").write_text(json.dumps(upd, indent=2) + "\n")
         published.append({**{k: b[k] for k in ("id", "name", "short", "chipFamily", "status", "notes")},
-                          "title": b.get("title", b["short"]), "tagline": b.get("tagline", ""),
+                          "title": b.get("title", b["short"]), "tagline": b.get("tagline", ""), "tab": b.get("tab", b["short"]),
                           "version": ver,
                           "mergedBytes": found["merged"].stat().st_size,
                           "firmwareBytes": found["firmware"].stat().st_size,

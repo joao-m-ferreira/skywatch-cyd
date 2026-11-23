@@ -50,13 +50,14 @@
   }
   try {
     const data = await get("boards.json");
-    const host = $("board-list");
-    host.replaceChildren();
-    data.boards.forEach((b, i) => {
-      const card = el("article", { class: "card", id: b.id });
-      card.append(el("img", { src: `img/plane-${(i % 6) + 1}.png`, alt: "", loading: "lazy" }));
-      const body = el("div", {});
-      body.append(el("h3", { text: b.title || b.short }), el("span", { class: "chip " + b.status, text: CHIP[b.status] }));
+    const tabs = $("board-tabs"), host = $("board-list");
+    const byId = Object.fromEntries(data.boards.map((b) => [b.id, b]));
+    function card(b) {
+      const c = el("article", { class: "card", id: b.id });
+      c.append(el("img", { class: "board-img", src: `img/board-${b.id}.svg`, alt: b.title || b.short }),
+        el("h3", { text: b.title || b.short }),
+        el("p", { class: "tag", text: b.tagline || "" }),
+        el("span", { class: "chip " + b.status, text: CHIP[b.status] }));
       const actions = el("div", { class: "actions" });
       actions.append(
         installButton(`manifests/${b.id}.json`, "Install", false, b.id, b.version, "install"),
@@ -65,13 +66,26 @@
         actions.hidden = true;
         const box = el("input", { type: "checkbox", id: `ack-${b.id}` });
         box.addEventListener("change", () => { actions.hidden = !box.checked; });
-        body.append(el("p", { class: "warn", text: WARN[b.status] }),
+        c.append(el("p", { class: "warn", text: WARN[b.status] }),
           el("label", { class: "ack", for: `ack-${b.id}` }, box, el("span", { text: "I understand and want to install it anyway." })));
       }
-      body.append(actions);
-      card.append(body);
-      host.append(card);
-    });
+      c.append(actions);
+      return c;
+    }
+    function show(id, remember) {
+      const b = byId[id] || data.boards[0];
+      for (const t of tabs.children) t.setAttribute("aria-pressed", String(t.dataset.id === b.id));
+      host.replaceChildren(card(b));  // only one board at a time
+      if (remember) history.replaceState(null, "", "#" + b.id);
+    }
+    for (const b of data.boards) {
+      const t = el("button", { type: "button", class: "tab", "data-id": b.id, "aria-pressed": "false" },
+        el("span", { class: "dot " + b.status }), b.tab || b.short);
+      t.addEventListener("click", () => show(b.id, true));
+      tabs.append(t);
+    }
+    const first = data.boards.find((b) => b.status === "verified") || data.boards[0];
+    show(location.hash.slice(1) || first.id, false);
   } catch (e) {
     $("board-list").replaceChildren(el("p", { class: "notice", text: "Could not load the list of boards. Please reload the page." }));
   }
