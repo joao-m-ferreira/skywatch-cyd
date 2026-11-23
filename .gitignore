@@ -5,3 +5,5 @@ dist/
 *.elf
 firmware/test/test_flights
 .env
+references/photos/*.jpg
+references/pasted/
