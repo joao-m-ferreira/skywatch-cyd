@@ -287,7 +287,7 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
              c->ssid[0] ? c->ssid : "(not set)", c->pass[0] ? "****" : "(empty)",
              c->auto_loc ? "auto (geojs.io, from your public IP)" : "static", c->lat, c->lon,
              c->radius_km, c->contact, c->night_on ? "on" : "off", c->night_start, c->night_end,
-             c->wake_min, c->plane_sec, c->max_planes, c->web_on ? "on" : "off", c->web_open ? "plane list open, settings need login" : "login",
+             c->wake_min, c->plane_sec, c->max_planes, c->web_on ? "on" : "off", c->web_open ? "no login" : "login",
              c->mcp_on ? "on" : "off", c->mcp_auth ? "on" : "off", c->adv_on ? "on" : "off", c->token[0] ? "set" : "(none)", c->debug_log ? "on" : "off", c->tz, panelName(c->panel), c->invert ? "on" : "off",
              c->rgb_swap ? "swap" : "normal", c->rotation,
              c->layout == 1 ? "side" : c->layout == 2 ? "flip" : c->layout == 3 ? "stacked" : "auto", c->led_pct, c->bl_pin,
