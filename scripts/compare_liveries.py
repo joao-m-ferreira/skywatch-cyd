@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Side-by-side sheets: real photo (references/photos/<ICAO>.jpg) | the firmware's 3D render.
 
-    python3 scripts/compare_liveries.py [per_sheet]   # writes build/sheets/sheetN.png
+    python3 scripts/compare_liveries.py [per_sheet] [CODE ...]   # writes build/sheets/sheetN.png (all, or only the listed airlines)
 
 Needs Pillow and g++. The photos are git-ignored (fetch them with scripts/fetch_reference_photos.py).
 Each pair is rendered with the callsign prefix of the airline and the ICAO type from index.json.
@@ -19,6 +19,9 @@ subprocess.run(["g++", "-std=c++17", "-O2", f"-I{fw}", f"-I{aj}", os.path.join(r
                 *[os.path.join(fw, f) for f in ("model3d.cpp", "silhouette.cpp", "airline.cpp")], "-o", exe], check=True)
 per = int(sys.argv[1]) if len(sys.argv) > 1 else 6
 codes = [c for c in idx if os.path.exists(os.path.join(root, f"references/photos/{c}.jpg"))]
+if len(sys.argv) > 2:
+    wanted = sys.argv[2:]
+    codes = [c for c in wanted if c in codes]
 font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 16) if os.path.exists(
     "/System/Library/Fonts/Supplemental/Arial Bold.ttf") else ImageFont.load_default()
 for si in range(0, len(codes), per):

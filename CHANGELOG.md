@@ -4,6 +4,7 @@ Releases follow [Semantic Versioning](https://semver.org/). Each release has not
 `docs/releases/<version>.md`, and its binaries are attached to the GitHub release.
 
 ## [Unreleased]
+- **Liveries checked against 65 more reference photos** (112 airlines now have one): about 40 airlines corrected. Coloured engines where the real aircraft have them (Aegean, Air India, Aeromexico, JetBlue, Jet2, Virgin Atlantic, Kenya, airBaltic, Air Algerie, Sky Express), fully coloured fuselages (AirAsia, DHL/AeroLogic, Royal Jordanian), white or silver fuselages and white fins where they apply (Air China, Starlux, Saudia, MEA, SunExpress, American Eagle), the red nose of Edelweiss, DHL's yellow tail, and new colours for Air Dolomiti, Oman Air, TUI-style blues, Smartwings and others. Regional carriers (SkyWest, Republic, BA CityFlyer, KLM Cityhopper) now look like their parent airline. `scripts/compare_liveries.py` can render just the airlines you list.
 
 ## [0.5.1] - 2026-11-23
 - **ESP8266:** the web page, JSON API, MCP server and mDNS announcement now run on the `esp8266-oled` build too (the same code as the ESP32 builds, behind one small compatibility header), with smaller limits (2 KB request bodies, a 4 KB tool result) and without the WiFi setup access point. To make room, the serial help text and the settings-page stylesheet live in flash instead of RAM, and the TLS receive buffer is 6 KB. Verified on a real board that it serves, announces and keeps fetching; not yet used from another computer.
