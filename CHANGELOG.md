@@ -5,6 +5,13 @@ Releases follow [Semantic Versioning](https://semver.org/). Each release has not
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-23
+- Many more accurate liveries: TAP, easyJet, Air Europa, Emirates, Etihad, Maersk Air Cargo, Air Transat
+  and ~25 new airlines; new tail and fuselage designs.
+- Night-mode touch wake lasts 10 minutes by default (`set wake <minutes>`).
+- `flights` serial command lists the detected aircraft.
+- Release pipeline fixed: the verify job no longer needs the Arduino toolchain, so binaries publish.
+
 ## [0.1.0] - 2026-11-22
 First release.
 - Standalone ESP32-2432S028 display of nearby aircraft (adsb.fi), carousel, touch, compass.

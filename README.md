@@ -31,19 +31,38 @@ type, route, altitude, speed, distance, a compass, and a shaded 3D model in the 
 One **ESP32-2432S028R** (2.8" ILI9341, resistive touch, RGB LED, light sensor) and a micro-USB
 cable, roughly €15–25. Capacitive "IPS" variants use different touch pins and are not supported.
 
-## Install
-Download the latest files from [Releases](https://github.com/joao-m-ferreira/skywatch-cyd/releases) and flash with `esptool`
-(`pip install esptool`):
+## Install (flash the prebuilt firmware)
+No toolchain needed: download the binary from [Releases](https://github.com/joao-m-ferreira/skywatch-cyd/releases)
+and write it to the board over USB.
 
-```sh
-# first install (one file; also erases saved settings)
-esptool.py --chip esp32 --port <port> --baud 460800 write_flash 0x0 skywatch-cyd-<version>-merged.bin
-# update an installed board (keeps your settings)
-esptool.py --chip esp32 --port <port> --baud 460800 write_flash 0x10000 skywatch-cyd-<version>-firmware.bin
-```
+1. From the latest release download **`skywatch-cyd-<version>-merged.bin`** (and `SHA256SUMS` to check it:
+   `shasum -a 256 -c SHA256SUMS`).
+2. Plug the board in with a micro-USB **data** cable and find its port: macOS `/dev/cu.wchusbserial*`
+   (or `/dev/cu.usbserial*`), Linux `/dev/ttyUSB0`, Windows `COM3`. If no port appears, install the
+   CH340 USB driver.
+3. Flash it, either with `esptool` (`pip install esptool`):
 
-Then open a serial terminal at **115200 baud** (`screen /dev/cu.wchusbserial* 115200`, Arduino
-serial monitor, …) and type `help`.
+   ```sh
+   # first install: one file at 0x0 (also erases saved settings)
+   esptool.py --chip esp32 --port <port> --baud 460800 write_flash 0x0 skywatch-cyd-<version>-merged.bin
+   # update an installed board: the app only (keeps your WiFi and settings)
+   esptool.py --chip esp32 --port <port> --baud 460800 write_flash 0x10000 skywatch-cyd-<version>-firmware.bin
+   ```
+
+   or from the browser (Chrome/Edge, nothing to install): open
+   [Espressif's web flasher](https://espressif.github.io/esptool-js/), connect, set the address to `0x0`,
+   pick the `-merged.bin` file and press Program.
+4. If the upload cannot connect, hold the **BOOT** button while it starts, then release it.
+5. Open a serial terminal at **115200 baud** (`screen /dev/cu.wchusbserial* 115200`, Arduino serial
+   monitor, …), type `help`, and set your WiFi:
+
+   ```
+   set ssid <your WiFi>
+   set pass <password>
+   ```
+
+The screen shows the planes around you within about a minute. The location comes from your public IP;
+use `set location static <lat> <lon>` for an exact one.
 
 ## Settings (USB serial, 115200 baud)
 Settings are saved in the board's flash. The build-time defaults come from `secrets.h`.
