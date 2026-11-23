@@ -1,0 +1,52 @@
+{
+  "boards": [
+    {
+      "id": "cyd",
+      "name": "ESP32-2432S028R \"Cheap Yellow Display\" 2.8\" (ILI9341, one USB port)",
+      "short": "CYD 2.8\" (ILI9341)",
+      "chipFamily": "ESP32",
+      "fqbn": "esp32:esp32:esp32:PartitionScheme=huge_app",
+      "flags": "",
+      "bootloaderOffset": 4096,
+      "flashBytes": 4194304,
+      "status": "verified",
+      "notes": "Tested on real hardware."
+    },
+    {
+      "id": "cyd-st7789",
+      "name": "2.8\" CYD, two USB ports (ST7789, inverted colours)",
+      "short": "CYD 2.8\" two-USB (ST7789)",
+      "chipFamily": "ESP32",
+      "fqbn": "esp32:esp32:esp32:PartitionScheme=huge_app",
+      "flags": "-DSKYWATCH_PANEL=1 -DSKYWATCH_INVERT=1",
+      "bootloaderOffset": 4096,
+      "flashBytes": 4194304,
+      "status": "untested",
+      "notes": "Same pinout as the CYD with the ST7789 panel and inversion preset. Not tested on hardware; if the colours look wrong, use the serial commands in the README."
+    },
+    {
+      "id": "cyd35",
+      "name": "ESP32-3248S035 3.5\" \"big CYD\" (ST7796, 480x320)",
+      "short": "CYD 3.5\" (ST7796)",
+      "chipFamily": "ESP32",
+      "fqbn": "esp32:esp32:esp32:PartitionScheme=huge_app",
+      "flags": "-DSKYWATCH_PANEL=2 -DSKYWATCH_BL_PIN=27 -DSKYWATCH_TOUCH_SHARED=1",
+      "bootloaderOffset": 4096,
+      "flashBytes": 4194304,
+      "status": "experimental",
+      "notes": "Pins are the common ones for these boards and have not been verified on hardware. Resistive touch only."
+    },
+    {
+      "id": "amoled18",
+      "name": "Waveshare ESP32-S3-Touch-AMOLED-1.8 (368x448, V2: CO5300 + CST820)",
+      "short": "Waveshare S3 AMOLED 1.8\"",
+      "chipFamily": "ESP32-S3",
+      "fqbn": "esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB,CDCOnBoot=cdc",
+      "flags": "",
+      "bootloaderOffset": 0,
+      "flashBytes": 16777216,
+      "status": "simulator",
+      "notes": "Only ever run in the esp32sim emulator, never on the real board."
+    }
+  ]
+}

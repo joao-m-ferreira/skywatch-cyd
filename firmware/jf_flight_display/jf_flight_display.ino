@@ -94,6 +94,20 @@ void loadConfig() {
   cfg.panel = 4;     // Waveshare AMOLED 1.8 (V2) ...
   cfg.rotation = 0;  // ... in its native portrait orientation: the stacked layout
 #endif
+  // Per-hardware defaults baked in by the release builds (firmware/boards.json), so a user does not
+  // need the serial console for their board. Anything saved in flash still overrides them.
+#ifdef SKYWATCH_PANEL
+  cfg.panel = SKYWATCH_PANEL;
+#endif
+#ifdef SKYWATCH_INVERT
+  cfg.invert = SKYWATCH_INVERT != 0;
+#endif
+#ifdef SKYWATCH_BL_PIN
+  cfg.bl_pin = SKYWATCH_BL_PIN;
+#endif
+#ifdef SKYWATCH_TOUCH_SHARED
+  cfg.touch_shared = SKYWATCH_TOUCH_SHARED != 0;
+#endif
   prefs.begin("skywatch", true);
   if (prefs.isKey("ssid")) prefs.getString("ssid", cfg.ssid, sizeof cfg.ssid);
   if (prefs.isKey("pass")) prefs.getString("pass", cfg.pass, sizeof cfg.pass);
