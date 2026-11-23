@@ -276,6 +276,29 @@ int main() {
     CHECK(jf::configCommand(&c, "set wake 15", r, sizeof r) == jf::CmdAction::Changed && c.wake_min == 15);
     CHECK(jf::configCommand(&c, "set wake 0", r, sizeof r) == jf::CmdAction::None && c.wake_min == 15);
     CHECK(jf::configCommand(&c, "set wake 121", r, sizeof r) == jf::CmdAction::None);
+    // board variants: display settings restart the board, everything is validated
+    CHECK(c.panel == 0 && !c.invert && !c.rgb_swap && c.rotation == 1 && c.led_pct == 100);
+    CHECK(jf::configCommand(&c, "set panel st7789", r, sizeof r) == jf::CmdAction::Display && c.panel == 1);
+    CHECK(jf::configCommand(&c, "set panel ili9341", r, sizeof r) == jf::CmdAction::Display && c.panel == 0);
+    CHECK(jf::configCommand(&c, "set panel hx8357", r, sizeof r) == jf::CmdAction::None && c.panel == 0);
+    CHECK(jf::configCommand(&c, "set invert on", r, sizeof r) == jf::CmdAction::Display && c.invert);
+    CHECK(jf::configCommand(&c, "set invert maybe", r, sizeof r) == jf::CmdAction::None && c.invert);
+    CHECK(jf::configCommand(&c, "set rgb swap", r, sizeof r) == jf::CmdAction::Display && c.rgb_swap);
+    CHECK(jf::configCommand(&c, "set rgb normal", r, sizeof r) == jf::CmdAction::Display && !c.rgb_swap);
+    CHECK(jf::configCommand(&c, "set rotation 3", r, sizeof r) == jf::CmdAction::Display && c.rotation == 3);
+    CHECK(jf::configCommand(&c, "set rotation 2", r, sizeof r) == jf::CmdAction::None && c.rotation == 3);
+    CHECK(jf::configCommand(&c, "set rotation 0", r, sizeof r) == jf::CmdAction::None);
+    CHECK(jf::configCommand(&c, "set led 40", r, sizeof r) == jf::CmdAction::Changed && c.led_pct == 40);
+    CHECK(jf::configCommand(&c, "set led 101", r, sizeof r) == jf::CmdAction::None && c.led_pct == 40);
+    CHECK(jf::configCommand(&c, "set led -1", r, sizeof r) == jf::CmdAction::None && c.led_pct == 40);
+    jf::configCommand(&c, "show", r, sizeof r);
+    CHECK(strstr(r, "ILI9341") != nullptr && strstr(r, "rotation 3") != nullptr && strstr(r, "led 40%") != nullptr);
+    CHECK(!jf::configSafeMode(0) && !jf::configSafeMode(2) && jf::configSafeMode(3) && jf::configSafeMode(9));
+    {  // the whole help text must fit the console reply buffer of the firmware (1800 bytes) untruncated
+      char big[1800];
+      CHECK(jf::configCommand(&c, "help", big, sizeof big) == jf::CmdAction::None);
+      CHECK(strstr(big, "factory") != nullptr && strlen(big) < sizeof big - 1);
+    }
     CHECK(jf::configCommand(&c, "set tz CET-1CEST,M3.5.0,M10.5.0/3", r, sizeof r) == jf::CmdAction::Changed && c.tz_set);
     CHECK(jf::configCommand(&c, "set colour red", r, sizeof r) == jf::CmdAction::None);
     CHECK(strstr(r, "unknown setting") != nullptr);

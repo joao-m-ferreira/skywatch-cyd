@@ -94,7 +94,7 @@ void field(lgfx::LovyanGFX& g, const Colors& c, int y, const char* label, const 
 }  // namespace
 
 void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
-               const char* header_left, const char* header_right, const jf::Photo* photo) {
+               const char* header_left, const char* header_right, const jf::Photo* photo, bool lite) {
   const Colors c = colors(g);
   g.startWrite();
   frame(g, c, header_left, header_right);
@@ -138,8 +138,14 @@ void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
   pal.gear = (f.alt_ft < 1500 && f.speed_kt < 200) ? 1 : 0;  // landing gear down when low and slow
   const bool right = f.track > 0 && f.track < 180;  // eastbound: nose to the right
   bool shown_photo = false;
-  if (photo != nullptr && photo->jpg != nullptr) shown_photo = drawPhoto(g, *photo, c);
-  if (!shown_photo) {
+  if (!lite && photo != nullptr && photo->jpg != nullptr) shown_photo = drawPhoto(g, *photo, c);
+  if (!shown_photo && lite) {
+    g.setFont(&lgfx::fonts::Font2);
+    g.setTextDatum(lgfx::middle_center);
+    g.setTextColor(c.faint);
+    g.drawString("safe mode", 92, 100);
+    g.drawString("(restarted repeatedly)", 92, 120);
+  } else if (!shown_photo) {
     const jf::Mesh& mesh = jf::buildAircraft(f.type, pal);
     // Allocated once and kept (too big for static DRAM; per-draw malloc fragments the heap).
     static jf::ScreenTri* tris = static_cast<jf::ScreenTri*>(malloc(sizeof(jf::ScreenTri) * jf::kMaxTris));

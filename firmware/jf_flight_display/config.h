@@ -18,9 +18,15 @@ struct Config {
   char tz[48];       // POSIX TZ string for the clock
   bool auto_loc;     // true: work out the location from the public IP (until lat/lon are set)
   bool tz_set;       // true once the user chose a timezone (never overridden by geo-IP)
+  // Board variant (the "CYD" is sold with several panels). Changing these restarts the board.
+  int panel;         // 0 = ILI9341 (the single-USB ESP32-2432S028R), 1 = ST7789 (two-USB variant)
+  bool invert;       // colour inversion (some panels need it)
+  bool rgb_swap;     // swap red and blue
+  int rotation;      // 1 or 3 (3 = upside down)
+  int led_pct;       // RGB LED brightness 0..100 (lower it if a weak USB port browns out)
 };
 
-enum class CmdAction { None, Changed, Reboot, Factory };
+enum class CmdAction { None, Changed, Display, Reboot, Factory };  // Display: saved, then restart to apply
 
 constexpr const char* kDefaultTz = "WET0WEST,M3.5.0/1,M10.5.0";  // Lisbon
 
@@ -37,6 +43,9 @@ const char* posixTzFor(const char* iana);
 
 // True when a WiFi network has been configured (not empty, not the example placeholder).
 bool configWifiReady(const Config& c);
+
+// True when the board has crashed (panic, watchdog, brownout) this many times in a row: start in safe mode.
+bool configSafeMode(int consecutive_crashes);
 
 // True when `hour` (0..23) is inside the night window; handles windows across midnight.
 bool isNightHour(const Config& c, int hour);

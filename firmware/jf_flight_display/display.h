@@ -1,14 +1,32 @@
-// LovyanGFX configuration for the ESP32-2432S028. Pins come from board.h.
+// LovyanGFX configuration for the ESP32-2432S028 family. Pins come from board.h. The same pinout is
+// sold with different panels (ILI9341 on the single-USB board, ST7789 on the two-USB one, some of
+// them needing inverted colours), so the panel is chosen at start-up from the saved settings.
 #pragma once
 #include <LovyanGFX.hpp>
 
 #include "board.h"
 
 class LGFX : public lgfx::LGFX_Device {
-  lgfx::Panel_ILI9341 panel_;
+  lgfx::Panel_ILI9341 ili9341_;
+  lgfx::Panel_ST7789 st7789_;
   lgfx::Bus_SPI bus_;
   lgfx::Light_PWM light_;
   lgfx::Touch_XPT2046 touch_;
+
+  template <typename P>
+  void setupPanel(P& panel, bool invert, bool rgb_swap) {
+    auto c = panel.config();
+    c.pin_cs = board::kTftCs;
+    c.pin_rst = -1;
+    c.panel_width = 240;
+    c.panel_height = 320;
+    c.invert = invert;
+    c.rgb_order = rgb_swap;
+    panel.config(c);
+    panel.setBus(&bus_);
+    panel.setLight(&light_);
+    panel.setTouch(&touch_);
+  }
 
  public:
   LGFX() {
@@ -23,17 +41,6 @@ class LGFX : public lgfx::LGFX_Device {
       c.pin_miso = board::kTftMiso;
       c.pin_dc = board::kTftDc;
       bus_.config(c);
-      panel_.setBus(&bus_);
-    }
-    {
-      auto c = panel_.config();
-      c.pin_cs = board::kTftCs;
-      c.pin_rst = -1;
-      c.panel_width = 240;
-      c.panel_height = 320;
-      c.invert = false;
-      c.rgb_order = false;
-      panel_.config(c);
     }
     {
       auto c = light_.config();
@@ -42,7 +49,6 @@ class LGFX : public lgfx::LGFX_Device {
       c.freq = 12000;
       c.pwm_channel = 7;
       light_.config(c);
-      panel_.setLight(&light_);
     }
     {
       auto c = touch_.config();
@@ -59,8 +65,18 @@ class LGFX : public lgfx::LGFX_Device {
       c.pin_miso = board::kTouchMiso;
       c.pin_cs = board::kTouchCs;
       touch_.config(c);
-      panel_.setTouch(&touch_);
     }
-    setPanel(&panel_);
+    useVariant(0, false, false);
+  }
+
+  // Selects the panel (0 = ILI9341, 1 = ST7789), colour inversion and red/blue order. Call before init().
+  void useVariant(int panel, bool invert, bool rgb_swap) {
+    if (panel == 1) {
+      setupPanel(st7789_, invert, rgb_swap);
+      setPanel(&st7789_);
+    } else {
+      setupPanel(ili9341_, invert, rgb_swap);
+      setPanel(&ili9341_);
+    }
   }
 };

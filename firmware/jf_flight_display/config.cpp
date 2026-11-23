@@ -54,6 +54,13 @@ const char kHelp[] =
     "  set night <from> <to>  screen off between these hours, e.g. set night 23 7\n"
     "  set night off|on       disable / enable night mode\n"
     "  set wake <minutes>     how long a touch wakes the screen at night, 1..120 (default 10)\n"
+    "  set panel ili9341|st7789  display controller (two-USB CYD boards are ST7789); restarts\n"
+    "  set invert on|off      colour inversion (colours look negative: toggle it); restarts\n"
+    "  set rgb normal|swap    swap red and blue (red looks blue: use swap); restarts\n"
+    "  set rotation 1|3       3 = upside down; restarts\n"
+    "  set led <0..100>       RGB LED brightness percent (lower it if the board resets on weak USB)\n"
+    "  display test           colour test card to identify your panel variant\n"
+    "  safe on|off            force / leave safe mode (no photos or 3D model; used after repeated crashes)\n"
     "  night test             force night mode for 20 s to try it (not saved)\n"
     "  reboot                 restart the board\n"
     "  factory                forget saved settings (back to build defaults)\n";
@@ -76,7 +83,14 @@ void configDefaults(Config* c, const char* ssid, const char* pass, double lat, d
   copy(c->tz, sizeof c->tz, kDefaultTz);
   c->auto_loc = true;
   c->tz_set = false;
+  c->panel = 0;
+  c->invert = false;
+  c->rgb_swap = false;
+  c->rotation = 1;
+  c->led_pct = 100;
 }
+
+bool configSafeMode(int consecutive_crashes) { return consecutive_crashes >= 3; }
 
 const char* posixTzFor(const char* iana) {
   struct Row {
@@ -147,11 +161,13 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
   if (strcasecmp(p, "show") == 0) {
     snprintf(reply, n,
              "ssid     %s\npass     %s\nlocation %s\nlat      %.5f\nlon      %.5f\nradius   %d km\n"
-             "contact  %s\nnight    %s (%02d:00 - %02d:00)\nwake     %d min (touch at night)\ntz       %s\n",
+             "contact  %s\nnight    %s (%02d:00 - %02d:00)\nwake     %d min (touch at night)\ntz       %s\n"
+             "display  %s, invert %s, rgb %s, rotation %d, led %d%%\n",
              c->ssid[0] ? c->ssid : "(not set)", c->pass[0] ? "****" : "(empty)",
              c->auto_loc ? "auto (geojs.io, from your public IP)" : "static", c->lat, c->lon,
              c->radius_km, c->contact, c->night_on ? "on" : "off", c->night_start, c->night_end,
-             c->wake_min, c->tz);
+             c->wake_min, c->tz, c->panel == 1 ? "ST7789" : "ILI9341", c->invert ? "on" : "off",
+             c->rgb_swap ? "swap" : "normal", c->rotation, c->led_pct);
     return CmdAction::None;
   }
   if (strcasecmp(p, "reboot") == 0) {
@@ -176,6 +192,7 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
 
   double d;
   int a, b;
+  bool display_change = false;
   if (strcasecmp(key, "ssid") == 0) {
     if (*value == '\0' || strlen(value) > 32) {
       snprintf(reply, n, "error: ssid must be 1..32 characters\n");
@@ -264,6 +281,43 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
       c->night_start = a;
       c->night_end = b;
     }
+  } else if (strcasecmp(key, "panel") == 0) {
+    if (strcasecmp(value, "ili9341") == 0) c->panel = 0;
+    else if (strcasecmp(value, "st7789") == 0) c->panel = 1;
+    else {
+      snprintf(reply, n, "error: panel is ili9341 or st7789\n");
+      return CmdAction::None;
+    }
+    display_change = true;
+  } else if (strcasecmp(key, "invert") == 0) {
+    if (strcasecmp(value, "on") == 0) c->invert = true;
+    else if (strcasecmp(value, "off") == 0) c->invert = false;
+    else {
+      snprintf(reply, n, "error: invert is on or off\n");
+      return CmdAction::None;
+    }
+    display_change = true;
+  } else if (strcasecmp(key, "rgb") == 0) {
+    if (strcasecmp(value, "swap") == 0) c->rgb_swap = true;
+    else if (strcasecmp(value, "normal") == 0) c->rgb_swap = false;
+    else {
+      snprintf(reply, n, "error: rgb is normal or swap\n");
+      return CmdAction::None;
+    }
+    display_change = true;
+  } else if (strcasecmp(key, "rotation") == 0) {
+    if (!parseInt(value, 1, 3, &a) || a == 2) {
+      snprintf(reply, n, "error: rotation is 1 or 3\n");
+      return CmdAction::None;
+    }
+    c->rotation = a;
+    display_change = true;
+  } else if (strcasecmp(key, "led") == 0) {
+    if (!parseInt(value, 0, 100, &a)) {
+      snprintf(reply, n, "error: led is a percent from 0 to 100\n");
+      return CmdAction::None;
+    }
+    c->led_pct = a;
   } else if (strcasecmp(key, "wake") == 0) {
     if (!parseInt(value, 1, 120, &a)) {
       snprintf(reply, n, "error: wake must be a whole number of minutes from 1 to 120\n");
@@ -274,8 +328,8 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
     snprintf(reply, n, "unknown setting '%s' (type help)\n", key);
     return CmdAction::None;
   }
-  snprintf(reply, n, "ok, saved (%s)\n", key);
-  return CmdAction::Changed;
+  snprintf(reply, n, display_change ? "ok, saved (%s); restarting to apply\n" : "ok, saved (%s)\n", key);
+  return display_change ? CmdAction::Display : CmdAction::Changed;
 }
 
 }  // namespace jf

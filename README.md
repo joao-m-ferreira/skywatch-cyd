@@ -78,8 +78,33 @@ Settings are saved in the board's flash. The build-time defaults come from `secr
 | `set contact <email>` | contact sent to planespotters.net (required by their API) |
 | `set night <from> <to>` / `set night off` | screen off between these hours, e.g. `set night 23 7` |
 | `set tz <posix tz>` | clock timezone (found from your location when auto) |
+| `set panel ili9341\|st7789` / `set invert on\|off` / `set rgb normal\|swap` / `set rotation 1\|3` | board variant: panel, colour inversion, red/blue order, upside-down (restarts to apply) |
+| `display test` | colour test card for 15 s, to identify your panel variant |
+| `set led <0..100>` | RGB LED brightness percent |
+| `safe on\|off` | force / leave safe mode |
 | `night test` | try night mode for 20 s (not saved) |
 | `reboot` / `factory` | restart / forget saved settings |
+
+## Board variants and troubleshooting
+The "Cheap Yellow Display" is sold with the same pinout but different panels. The default matches the
+single-USB **ESP32-2432S028R** (ILI9341). If colours are wrong on your board, run `display test` and
+compare the bars with red, green, blue, white, black, yellow, cyan, magenta:
+
+| You see | Do |
+|---|---|
+| red and blue swapped | `set rgb swap` |
+| colours look like a negative | `set invert on` (or `off`) |
+| upside down | `set rotation 3` |
+| white or garbled screen, two USB ports (micro + USB-C) | `set panel st7789`, then `set invert on` if needed |
+
+The board restarts to apply each display setting and remembers it. Boards with capacitive touch or
+other screen sizes use different pins and are not supported.
+
+`status` shows why the board last restarted (power on, software, panic, watchdog, **brownout**), the
+largest free block of memory and the number of crashes in a row. A **brownout** usually means a weak
+USB port or cable: try another port, or lower the LED with `set led 30`. After three crashes in a row
+the board starts in **safe mode** (no photos, no 3D model, text only) so it can still be reached;
+five stable minutes, or `safe off`, bring it back to normal.
 
 ## Build from source
 Needs `arduino-cli`, Go (optional proxy only), and the ESP32 core.

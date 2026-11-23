@@ -5,6 +5,8 @@
 #include <Preferences.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <esp_heap_caps.h>
+#include <esp_system.h>
 #include <esp_task_wdt.h>
 #include <time.h>
 
@@ -49,6 +51,32 @@ uint32_t lastGeoTry = 0;
 bool setupScreenShown = false;
 uint32_t nightTestUntil = 0;  // "night test": force night mode until this millis() (not saved)
 int lastBacklight = -1;
+// Stability: reset reason, consecutive crashes (panic / watchdog / brownout) and safe mode.
+esp_reset_reason_t resetReason = ESP_RST_UNKNOWN;
+int crashCount = 0;
+bool safeMode = false;
+bool stableMarked = false;
+bool forceRedraw = false;
+int lowBlockCount = 0;
+
+const char* resetName(esp_reset_reason_t r) {
+  switch (r) {
+    case ESP_RST_POWERON: return "power on";
+    case ESP_RST_SW: return "software restart";
+    case ESP_RST_PANIC: return "PANIC (crash)";
+    case ESP_RST_INT_WDT: return "interrupt watchdog";
+    case ESP_RST_TASK_WDT: return "task watchdog";
+    case ESP_RST_WDT: return "watchdog";
+    case ESP_RST_BROWNOUT: return "BROWNOUT (weak power)";
+    case ESP_RST_DEEPSLEEP: return "deep sleep";
+    case ESP_RST_EXT: return "reset button";
+    default: return "other";
+  }
+}
+bool abnormalReset(esp_reset_reason_t r) {
+  return r == ESP_RST_PANIC || r == ESP_RST_INT_WDT || r == ESP_RST_TASK_WDT || r == ESP_RST_WDT ||
+         r == ESP_RST_BROWNOUT;
+}
 
 uint32_t wakeMs() { return static_cast<uint32_t>(cfg.wake_min) * 60000UL; }  // touch-to-wake at night
 
@@ -71,6 +99,11 @@ void loadConfig() {
   if (prefs.isKey("tz")) prefs.getString("tz", cfg.tz, sizeof cfg.tz);
   cfg.auto_loc = prefs.getBool("aloc", cfg.auto_loc);
   cfg.tz_set = prefs.getBool("tzset", cfg.tz_set);
+  cfg.panel = prefs.getInt("panel", cfg.panel);
+  cfg.invert = prefs.getBool("invert", cfg.invert);
+  cfg.rgb_swap = prefs.getBool("rgbswap", cfg.rgb_swap);
+  cfg.rotation = prefs.getInt("rot", cfg.rotation);
+  cfg.led_pct = prefs.getInt("led", cfg.led_pct);
   prefs.end();
 }
 
@@ -89,6 +122,11 @@ void saveConfig() {
   prefs.putString("tz", cfg.tz);
   prefs.putBool("aloc", cfg.auto_loc);
   prefs.putBool("tzset", cfg.tz_set);
+  prefs.putInt("panel", cfg.panel);
+  prefs.putBool("invert", cfg.invert);
+  prefs.putBool("rgbswap", cfg.rgb_swap);
+  prefs.putInt("rot", cfg.rotation);
+  prefs.putInt("led", cfg.led_pct);
   prefs.end();
 }
 
@@ -164,6 +202,33 @@ bool geoLocate() {
   return ok;
 }
 
+// Reads the HTTP body completely: up to Content-Length when the server gives one (a short read is a
+// failure, not a document), else until the connection closes. Bounded by maxLen and a stall timeout.
+bool readBody(HTTPClient& http, size_t maxLen, String* out) {
+  const int expect = http.getSize();
+  if (expect > 0 && static_cast<size_t>(expect) > maxLen) return false;
+  WiFiClient* s = http.getStreamPtr();
+  if (expect > 0) out->reserve(static_cast<unsigned>(expect));
+  char buf[512];
+  uint32_t last = millis();
+  while (out->length() < maxLen && (expect <= 0 || out->length() < static_cast<size_t>(expect)) &&
+         (http.connected() || s->available() > 0)) {
+    const int avail = s->available();
+    if (avail > 0) {
+      const int n = s->readBytes(buf, avail < static_cast<int>(sizeof buf) ? avail : static_cast<int>(sizeof buf));
+      if (n > 0) {
+        out->concat(buf, static_cast<unsigned>(n));
+        last = millis();
+      }
+    } else {
+      if (millis() - last > 8000) break;  // stalled
+      delay(5);
+    }
+    esp_task_wdt_reset();
+  }
+  return expect > 0 ? out->length() == static_cast<size_t>(expect) : out->length() > 0;
+}
+
 // Standalone: query adsb.fi open data directly (HTTPS).
 bool fetchFlightsOnce() {
   if (WiFi.status() != WL_CONNECTED && !connectWifi()) return false;
@@ -190,10 +255,11 @@ bool fetchFlightsOnce() {
   } else {
     // Read the whole body first: parsing straight from the TLS stream can hit a
     // momentary "no data yet" and be mistaken for the end of the document.
-    String body = http.getString();
+    String body;
     constexpr size_t kMaxBody = 120000;
-    if (body.length() == 0 || body.length() > kMaxBody) {
-      snprintf(lastError, sizeof lastError, "Body size %u", static_cast<unsigned>(body.length()));
+    const bool complete = readBody(http, kMaxBody, &body);
+    if (!complete || body.length() == 0 || body.length() > kMaxBody) {
+      snprintf(lastError, sizeof lastError, "Body %u of %d B", static_cast<unsigned>(body.length()), http.getSize());
       Serial.println(lastError);
     } else {
       JsonDocument filter, doc;
@@ -226,6 +292,15 @@ bool fetchFlightsOnce() {
 
 // The HTTPS body occasionally arrives truncated; one retry fixes it.
 bool fetchFlights() {
+  // mbedTLS needs 16 KB buffers in one piece: when the heap is too fragmented for that, skip the fetch
+  // instead of failing half-way, and restart if it stays that way.
+  if (ESP.getMaxAllocHeap() < 24000) {
+    snprintf(lastError, sizeof lastError, "Low memory (%u B block)", static_cast<unsigned>(ESP.getMaxAllocHeap()));
+    Serial.println(lastError);
+    if (++lowBlockCount >= 5) restartNow("heap too fragmented");
+    return false;
+  }
+  lowBlockCount = 0;
   for (int attempt = 0; attempt < 2; ++attempt) {
     if (fetchFlightsOnce()) return true;
     delay(400);
@@ -236,8 +311,8 @@ bool fetchFlights() {
 // ---------------------------------------------------------------- LED
 
 // RGB LED on the back of the board (active low). Shows the airline's primary colour;
-// colours are normalised to full brightness for their hue, then scaled by kLedBrightness.
-constexpr float kLedBrightness = 1.0f;  // 0..1
+// colours are normalised to full brightness for their hue, then scaled by the `led` setting.
+float ledBrightness() { return static_cast<float>(cfg.led_pct) / 100.0f; }  // 0..1, set led <percent>
 
 // This LED's green is much stronger than its red, so yellow looks green/white unless the channels
 // are balanced first.
@@ -247,7 +322,7 @@ void setLed(int r, int g, int b) {
   const float fr = static_cast<float>(r) * kGainR, fg = static_cast<float>(g) * kGainG,
               fb = static_cast<float>(b) * kGainB;
   const float peak = fr > fg ? (fr > fb ? fr : fb) : (fg > fb ? fg : fb);
-  const float k = peak > 0.0f ? 255.0f / peak * kLedBrightness : 0.0f;
+  const float k = peak > 0.0f ? 255.0f / peak * ledBrightness() : 0.0f;
   ledcWrite(board::kLedR, 255 - static_cast<int>(fr * k));
   ledcWrite(board::kLedG, 255 - static_cast<int>(fg * k));
   ledcWrite(board::kLedB, 255 - static_cast<int>(fb * k));
@@ -325,7 +400,7 @@ void drawScreen() {
   if (selected >= flightCount) selected = 0;
   ledForPlane(&flights[selected]);
   drawPlate(tft, flights[selected], selected, flightCount, left, right,
-            jf::photoFor(flights[selected].reg));
+            safeMode ? nullptr : jf::photoFor(flights[selected].reg), safeMode);
 }
 
 void updateBacklight() {
@@ -350,6 +425,35 @@ void printStatus() {
                 nightMode ? " (active now)" : "", screenOff ? "OFF" : "on", lastBacklight,
                 analogRead(board::kLdr), flightCount,
                 lastFetchOk ? "ok" : (lastError[0] ? lastError : "none yet"));
+  Serial.printf("reset    %s, %d crash(es) in a row%s\nheap     largest block %u\n", resetName(resetReason),
+                crashCount, safeMode ? " - SAFE MODE (no photos, no 3D model)" : "",
+                static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
+}
+
+// Colour test card: tells the panel variants apart. Left to right: red, green, blue, white, black,
+// yellow, cyan, magenta; below, a grey ramp.
+void drawTestCard() {
+  const int w = board::kScreenW, h = board::kScreenH;
+  const uint16_t cols[8] = {tft.color565(255, 0, 0),   tft.color565(0, 255, 0),   tft.color565(0, 0, 255),
+                            tft.color565(255, 255, 255), tft.color565(0, 0, 0),    tft.color565(255, 255, 0),
+                            tft.color565(0, 255, 255), tft.color565(255, 0, 255)};
+  tft.startWrite();
+  for (int i = 0; i < 8; ++i) tft.fillRect(i * w / 8, 0, w / 8 + 1, h / 2, cols[i]);
+  for (int x = 0; x < w; ++x) {
+    const int v = x * 255 / (w - 1);
+    tft.drawFastVLine(x, h / 2, h / 2 - 28, tft.color565(v, v, v));
+  }
+  tft.fillRect(0, h - 28, w, 28, tft.color565(40, 40, 40));
+  tft.setFont(&lgfx::fonts::Font2);
+  tft.setTextColor(tft.color565(255, 255, 255), tft.color565(40, 40, 40));
+  tft.setTextDatum(lgfx::middle_center);
+  tft.drawString("R G B W K Y C M   (see serial for help)", w / 2, h - 14);
+  tft.endWrite();
+  Serial.println("test card: bars should read red, green, blue, white, black, yellow, cyan, magenta.\n"
+                 "  red shows as blue      -> set rgb swap\n"
+                 "  colours look negative  -> set invert on (or off)\n"
+                 "  screen is upside down  -> set rotation 3\n"
+                 "  garbage / white screen -> set panel st7789 (or ili9341)");
 }
 
 void printFlights() {
@@ -384,6 +488,25 @@ void handleLine(const char* line) {
     printFlights();
     return;
   }
+  if (strcasecmp(line, "display test") == 0) {
+    drawTestCard();
+    for (int i = 0; i < 150; ++i) {  // keep it on screen for 15 s
+      esp_task_wdt_reset();
+      delay(100);
+    }
+    forceRedraw = true;
+    return;
+  }
+  if (strcasecmp(line, "safe on") == 0 || strcasecmp(line, "safe off") == 0) {
+    const bool on = strcasecmp(line, "safe on") == 0;
+    prefs.begin("skywatch", false);
+    prefs.putBool("safe", on);
+    prefs.putUChar("crashes", 0);
+    prefs.end();
+    Serial.printf("safe mode %s; restarting\n", on ? "forced on" : "off");
+    restartNow("safe mode changed");
+    return;
+  }
   if (strcasecmp(line, "night test") == 0) {  // 20 s of night mode, never saved
     nightTestUntil = millis() + 20000;
     Serial.println("night test: screen and LED off for 20 s (touch the screen to wake it for the 'wake' time)");
@@ -397,6 +520,10 @@ void handleLine(const char* line) {
       saveConfig();
       jf::photoSetContact(cfg.contact);
       netRestart = true;  // pick the new settings up
+      break;
+    case jf::CmdAction::Display:  // panel variant changed: it only applies at start-up
+      saveConfig();
+      restartNow("display setting changed");
       break;
     case jf::CmdAction::Factory:
       prefs.begin("skywatch", false);
@@ -468,6 +595,15 @@ void housekeeping(uint32_t now, bool sleeping) {
   if (now > kDailyRestartMs && (sleeping || now > kDailyRestartMs + 2UL * 3600UL * 1000UL)) {
     restartNow("daily restart");
   }
+  // Five stable minutes: forget earlier crashes (leaves safe mode on the next start).
+  if (!stableMarked && now > 300000UL) {
+    stableMarked = true;
+    if (crashCount > 0) {
+      prefs.begin("skywatch", false);
+      prefs.putUChar("crashes", 0);
+      prefs.end();
+    }
+  }
   // Heap safety net (three low readings in a row, checked every 5 s).
   static uint32_t lastHeapCheck = 0;
   static int low = 0;
@@ -483,8 +619,18 @@ void setup() {
   Serial.begin(115200);
   loadConfig();
   jf::photoSetContact(cfg.contact);
+  // Crash accounting: three abnormal resets in a row start safe mode; five minutes of stable running
+  // (or `safe off`) clear it.
+  resetReason = esp_reset_reason();
+  prefs.begin("skywatch", false);
+  crashCount = prefs.getUChar("crashes", 0);
+  if (abnormalReset(resetReason) && crashCount < 250) prefs.putUChar("crashes", ++crashCount);
+  const bool forcedSafe = prefs.getBool("safe", false);
+  prefs.end();
+  safeMode = forcedSafe || jf::configSafeMode(crashCount);
+  tft.useVariant(cfg.panel, cfg.invert, cfg.rgb_swap);
   tft.init();
-  tft.setRotation(1);  // 320x240 landscape
+  tft.setRotation(cfg.rotation);  // 320x240 landscape (3 = upside down)
   setupLed();
   xTaskCreatePinnedToCore(ledTask, "led", 3072, nullptr, 1, nullptr, 0);  // animates the LED independently
 
@@ -494,6 +640,8 @@ void setup() {
   esp_task_wdt_add(nullptr);
 
   Serial.printf("\nskywatch-cyd %s: type 'help' for settings\n", SKYWATCH_VERSION);
+  Serial.printf("reset reason: %s, crashes in a row: %d%s\n", resetName(resetReason), crashCount,
+                safeMode ? " - SAFE MODE" : "");
   if (jf::configWifiReady(cfg)) {
     drawPlateMessage(tft, "Connecting...", cfg.ssid, "Flights nearby", "", false);
     if (connectWifi()) {
@@ -579,7 +727,8 @@ void loop() {
     }
   }
 
-  bool redraw = false;
+  bool redraw = forceRedraw;
+  forceRedraw = false;
   if (now - lastPoll >= kPollMs) {
     lastPoll = now;
     fetchFailed = !fetchFlights();
@@ -613,7 +762,7 @@ void loop() {
     Serial.printf("drawn in %u ms, free heap %u\n", static_cast<unsigned>(millis() - t0),
                   static_cast<unsigned>(ESP.getFreeHeap()));
     // Photos: fetch the current plane's first (redraw when it arrives), then the next one's.
-    if (flightCount > 0) {
+    if (flightCount > 0 && !safeMode) {
       esp_task_wdt_reset();
       if (jf::routePrefetch(flights[selected].callsign)) drawScreen();
       esp_task_wdt_reset();
