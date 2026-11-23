@@ -5,6 +5,10 @@ Releases follow [Semantic Versioning](https://semver.org/). Each release has not
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-23
+- **ESP8266:** the web page, JSON API, MCP server and mDNS announcement now run on the `esp8266-oled` build too (the same code as the ESP32 builds, behind one small compatibility header), with smaller limits (2 KB request bodies, a 4 KB tool result) and without the WiFi setup access point. To make room, the serial help text and the settings-page stylesheet live in flash instead of RAM, and the TLS receive buffer is 6 KB. Verified on a real board that it serves, announces and keeps fetching; not yet used from another computer.
+- `base64Decode` (the HTTP Basic login) no longer depends on mbedTLS, so it works on both chips and is host-tested.
+
 ## [0.5.0] - 2026-11-23
 - **WiFi setup mode:** with no WiFi saved, or none reachable for 3 minutes, the board opens its own WiFi (`skywatch-XXXX`, random password) and a captive settings page for WiFi, location, radius, seconds per plane and night mode. The screen shows a QR code, the name, the password and the address. `setup` over serial or a 3 s button hold starts it by hand.
 - **TTGO T-Display** (`ttgo-tdisplay`, 240x135) and **M5StickC** (`m5stickc`, 160x80) boards, both tested on real hardware, with compact layouts that show one value at a time (distance, altitude, speed) and the button for the next plane.

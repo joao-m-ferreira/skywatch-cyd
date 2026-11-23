@@ -3,7 +3,7 @@
 #pragma once
 #include "config.h"
 
-class WebServer;
+#include "net_compat.h"
 
 namespace jf {
 

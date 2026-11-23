@@ -1,9 +1,9 @@
 # Network interfaces
 
-What the board offers on your network, how to find it, and how to talk to it. This page covers the **ESP32 builds**
-(every board except the ESP8266, which has no web page, JSON API or MCP server: it has serial only). Everything here is
-tested in the esp32sim emulator (`scripts/emu-web.sh`) and by host tests (`scripts/test.sh`); it has not been run
-on a real board yet. The example payloads below were generated from the firmware's own code.
+What the board offers on your network, how to find it, and how to talk to it. This page covers every build. The **ESP8266** build serves the same web page, JSON API, MCP server and mDNS names
+with a few limits, listed in [ESP8266](#esp8266); only the WiFi setup access point is missing there. All of it is
+tested in the esp32sim emulator (`scripts/emu-web.sh`) and by host tests (`scripts/test.sh`); on real boards it has
+not been used from another computer yet (the ESP8266 starts the server, announces itself and keeps fetching). The example payloads below were generated from the firmware's own code.
 
 | Interface | Address | Needs | Switch (default) |
 |---|---|---|---|
@@ -231,6 +231,16 @@ connected. The web page, API and MCP are not served while it is open.
 | `set max <1-20>` | most planes listed |
 | `setup` | open the setup access point |
 | `status`, `show`, `version`, `update` | state, settings, firmware version, check for a newer release |
+
+## ESP8266
+The same code serves the ESP8266 build (`esp8266-oled`), within an 80 KB RAM budget:
+- Request bodies over **2 KB** are refused (`413`; the ESP32 allows 8 KB), and a tool result that would not fit a 4 KB buffer answers
+  `-32603 Response too large`: lower `set max`.
+- **No setup access point**: set the WiFi over USB serial or with the portal's browser setup form.
+- mDNS changes apply live (no restart for `set advertise off`).
+- While the board fetches planes or looks up a route (a few seconds) it does not answer requests; a client simply waits.
+- Memory is tight: about 24 KB free when idle and 10 KB while fetching. A fetch that finds too little says "Not enough memory for TLS"
+  instead of crashing; `set web off` and `set mcp off` give the memory back.
 
 ## Troubleshooting
 | Symptom | Try |

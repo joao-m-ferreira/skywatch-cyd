@@ -57,6 +57,33 @@ inline const char* bearerToken(const char* header) {
   return header + 7;
 }
 
+// Decodes standard base64 (RFC 4648, with or without '=' padding) into `out`; returns the number of bytes, or -1 when
+// the text has a character outside the alphabet or the result would not fit `cap`. Used for the HTTP Basic login.
+inline int base64Decode(const char* in, size_t n, unsigned char* out, size_t cap) {
+  size_t o = 0;
+  uint32_t acc = 0;
+  int bits = 0;
+  for (size_t i = 0; i < n; ++i) {
+    const char c = in[i];
+    int v;
+    if (c >= 'A' && c <= 'Z') v = c - 'A';
+    else if (c >= 'a' && c <= 'z') v = c - 'a' + 26;
+    else if (c >= '0' && c <= '9') v = c - '0' + 52;
+    else if (c == '+') v = 62;
+    else if (c == '/') v = 63;
+    else if (c == '=') break;  // padding: nothing follows
+    else return -1;
+    acc = (acc << 6) | static_cast<uint32_t>(v);
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      if (o >= cap) return -1;
+      out[o++] = static_cast<unsigned char>((acc >> bits) & 0xFFu);
+    }
+  }
+  return static_cast<int>(o);
+}
+
 // Escapes text for an HTML attribute or element (&, <, >, ", '). Truncates to fit `n` bytes.
 inline void htmlEscape(const char* in, char* out, size_t n) {
   size_t o = 0;
