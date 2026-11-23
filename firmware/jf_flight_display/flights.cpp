@@ -7,6 +7,7 @@
 
 namespace jf {
 
+// Copies into a fixed buffer, tolerating a null source; always terminated.
 static void copyStr(char* dst, size_t n, const char* src) {
   if (n == 0) return;
   if (src == nullptr) src = "";
@@ -14,6 +15,8 @@ static void copyStr(char* dst, size_t n, const char* src) {
   dst[n - 1] = '\0';
 }
 
+// The ArduinoJson filter that keeps only the fields of an ADS-B record this firmware uses, so a large
+// payload never has to fit in RAM.
 void adsbFilter(JsonDocument& filter) {
   // adsb.fi uses "aircraft", adsb.lol uses "ac": accept both.
   for (const char* key : {"aircraft", "ac"}) {
@@ -29,6 +32,7 @@ void adsbFilter(JsonDocument& filter) {
   }
 }
 
+// The aircraft array of a response (the key is "aircraft" or "ac" depending on the source).
 static JsonArrayConst adsbList(const JsonDocument& doc) {
   JsonArrayConst arr = doc["aircraft"].as<JsonArrayConst>();
   return arr.isNull() ? doc["ac"].as<JsonArrayConst>() : arr;
@@ -139,6 +143,7 @@ bool formatRoute(const char* o_city, const char* o_iata, const char* d_city, con
   return true;
 }
 
+// "FL350" from 6000 ft up, else "3500 ft".
 void formatAltitude(int alt_ft, char* buf, size_t n) {
   if (alt_ft >= 6000) {
     snprintf(buf, n, "FL%03d", alt_ft / 100);
@@ -147,12 +152,14 @@ void formatAltitude(int alt_ft, char* buf, size_t n) {
   }
 }
 
+// 8-point compass name for a bearing in degrees; any integer is accepted (negative or above 359 wraps).
 const char* compass(int bearing) {
   static const char* const kNames[8] = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
   int b = ((bearing % 360) + 360) % 360;
   return kNames[((b + 22) / 45) % 8];
 }
 
+// "12.3 km" under 100 km, else "123 km".
 void formatDistance(float km, char* buf, size_t n) {
   if (km < 100.0f) {
     snprintf(buf, n, "%.1f km", static_cast<double>(km));
@@ -161,12 +168,15 @@ void formatDistance(float km, char* buf, size_t n) {
   }
 }
 
+// Backlight level (0-255) from the light sensor's 12-bit reading; never below about 35%, so a dark room does not
+// look like the screen is off.
 int backlightFor(int ldr_raw) {
   if (ldr_raw < 0) ldr_raw = 0;
   if (ldr_raw > 4095) ldr_raw = 4095;
   return 90 + (ldr_raw * 165) / 4095;  // never below ~35%: a dark room must not look like "off"
 }
 
+// See flights.h: the four rows of the OLED, each short enough for the 128-pixel screen.
 void formatOledText(const Flight& f, const char* airline_name, bool looks_like_airline, OledText* out) {
   snprintf(out->call, sizeof out->call, "%s", f.callsign);
   snprintf(out->type, sizeof out->type, "%s", f.type[0] ? f.type : "-");

@@ -13,6 +13,7 @@
 
 #include "airline.h"
 #include "config.h"
+#include "crc_util.h"
 #include "flights.h"
 #include "timing_util.h"
 #include "version.h"
@@ -51,9 +52,11 @@ char lastError[48] = "";
 struct Stored {
   uint32_t magic;  // changes with the Config layout: after an update that changes it the settings are reset
   jf::Config cfg;
+  uint32_t crc;    // over magic and cfg: a flash sector that decayed or was half-written is detected, not used
 };
-constexpr uint32_t kMagic = 0x534B5700u ^ static_cast<uint32_t>(sizeof(jf::Config));
+constexpr uint32_t kMagic = 0x534B5701u ^ static_cast<uint32_t>(sizeof(jf::Config));  // ...01: layout with a checksum
 
+// The factory settings of this build (no web page, MCP server or announcement: they do not exist on this chip).
 void defaults() {
   jf::configDefaults(&cfg, "", "", 38.7223, -9.1393, 40, "you@example.com");
   cfg.panel = 6;
@@ -62,27 +65,33 @@ void defaults() {
   cfg.i2c_scl = SKYWATCH_I2C_SCL;
 }
 
+// Loads the settings from the flash sector the EEPROM library keeps: used only when the layout marker and the
+// checksum both match, then sanity-checked. Anything else (first start, an update that changed the layout, a
+// damaged sector) means the defaults.
 void loadConfig() {
   defaults();
   EEPROM.begin(sizeof(Stored));
   Stored s;
   EEPROM.get(0, s);
-  if (s.magic == kMagic) cfg = s.cfg;
-  cfg.web_on = cfg.mcp_on = cfg.adv_on = cfg.mcp_auth = false;
-  cfg.ssid[sizeof cfg.ssid - 1] = '\0';  // never trust flash content blindly
-  cfg.pass[sizeof cfg.pass - 1] = '\0';
-  cfg.contact[sizeof cfg.contact - 1] = '\0';
-  cfg.tz[sizeof cfg.tz - 1] = '\0';
-  if (cfg.max_planes < 1 || cfg.max_planes > static_cast<int>(jf::kMaxFlights)) cfg.max_planes = 10;
-  if (cfg.plane_sec < 3 || cfg.plane_sec > 120) cfg.plane_sec = 6;
+  if (s.magic == kMagic && s.crc == jf::crc32(&s, offsetof(Stored, crc))) {
+    cfg = s.cfg;
+  } else if (s.magic == kMagic) {
+    Serial.println("warning: the stored settings are corrupt (checksum); using defaults");
+  }  // else: first start, or an update that changed the layout: defaults
+  cfg.web_on = cfg.mcp_on = cfg.adv_on = cfg.mcp_auth = false;  // no web page or MCP server on this board
+  const int fixed = jf::configSanitize(&cfg);
+  if (fixed > 0) Serial.printf("warning: %d stored setting(s) were out of range and were reset to defaults\n", fixed);
 }
 
+// Writes the settings with a checksum; the whole struct is cleared first so padding never differs between writes.
 void saveConfig() {
   Stored s;
+  memset(&s, 0, sizeof s);  // no uninitialised padding in the checksum
   s.magic = kMagic;
   s.cfg = cfg;
+  s.crc = jf::crc32(&s, offsetof(Stored, crc));
   EEPROM.put(0, s);
-  EEPROM.commit();
+  if (!EEPROM.commit()) Serial.println("error: could not write the settings to flash");
 }
 
 // ---------------------------------------------------------------- screen
@@ -96,6 +105,7 @@ void message(const char* l1, const char* l2 = "", const char* l3 = "") {
   u8g2.sendBuffer();
 }
 
+// The plane on screen as four rows of text: call sign and type, airline, altitude and speed, distance and bearing.
 void drawPlane() {
   const jf::Flight& f = flights[selected];
   const jf::Airline* al = jf::airlineFor(f.callsign);
@@ -112,6 +122,7 @@ void drawPlane() {
   u8g2.sendBuffer();
 }
 
+// Draws a status message (not set up, connecting, fetching, no aircraft, fetch failed) or the selected plane.
 void drawScreen() {
   if (!jf::configWifiReady(cfg)) {
     message("WiFi not set up", "USB serial 115200:", "type 'help'");
@@ -129,6 +140,7 @@ void drawScreen() {
 // ---------------------------------------------------------------- network
 bool timeValid() { return time(nullptr) > 1700000000; }
 
+// Starts the NTP clock in the configured timezone.
 void startClock() {
   configTime(cfg.tz, "pool.ntp.org", "time.cloudflare.com");
   clockStarted = true;
@@ -144,17 +156,26 @@ class WaitingStream : public Stream {
   int peek() override { return c_->peek(); }
   size_t write(uint8_t) override { return 0; }
   int read() override {
+    if (started_ == 0) started_ = millis() | 1u;  // never 0, which means "not started"
+    // One document ends whatever the server does: after kMaxBytes or kMaxMs the stream reports its end and the parser
+    // fails cleanly (the fetch is retried later).
+    if (total_ >= kMaxBytes || jf::olderThan(millis(), started_, kMaxMs)) return -1;
     const uint32_t t0 = millis();
     while (c_->available() == 0) {
-      if (!c_->connected() || millis() - t0 > 8000) return -1;
+      if (!c_->connected() || jf::olderThan(millis(), t0, 8000)) return -1;
       delay(1);
       ESP.wdtFeed();
     }
+    ++total_;
     return c_->read();
   }
 
  private:
+  static constexpr size_t kMaxBytes = 400000;  // far above any aircraft list (about 1 KB per plane)
+  static constexpr uint32_t kMaxMs = 30000;    // for the whole document
   WiFiClient* c_;
+  size_t total_ = 0;
+  uint32_t started_ = 0;
 };
 
 // GET `url` over HTTPS and parse the JSON straight off the stream through `filter` into `doc`. The body of the
@@ -194,6 +215,8 @@ bool httpsJson(const char* host, const char* url, JsonDocument& filter, JsonDocu
   return ok;
 }
 
+// One attempt at the aircraft list: parsed straight off the connection, keeping the same plane on screen across
+// refreshes while it stays in range.
 bool fetchOnce() {
   char url[96];
   snprintf(url, sizeof url, "https://opendata.adsb.fi/api/v2/lat/%.2f/lon/%.2f/dist/%d", cfg.lat, cfg.lon,
@@ -218,6 +241,7 @@ bool fetchOnce() {
   return true;
 }
 
+// The aircraft list, with one retry (a connection can drop mid-body).
 bool fetchFlights() {
   if (fetchOnce()) return true;
   delay(500);
@@ -242,7 +266,7 @@ bool geoLocate() {
   cfg.lon = lo;
   const char* tz = jf::posixTzFor(doc["timezone"] | "");
   if (tz != nullptr && !cfg.tz_set) {
-    strncpy(cfg.tz, tz, sizeof cfg.tz - 1);
+    snprintf(cfg.tz, sizeof cfg.tz, "%s", tz);
     startClock();
   }
   saveConfig();
@@ -250,6 +274,7 @@ bool geoLocate() {
   return true;
 }
 
+// Starts (or restarts) joining the saved WiFi without waiting for the result.
 void startWifi() {
   WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
@@ -275,6 +300,7 @@ void printStatus() {
                 fetchedOnce ? "ok" : (lastError[0] ? lastError : "none yet"));
 }
 
+// The `version` command.
 void printVersion() {
   Serial.printf("skywatch-cyd %s (ESP8266 OLED build, built %s %s)\nchip     ESP8266 %u MHz, %u MB flash, SDA %d SCL %d\n",
                 SKYWATCH_VERSION, __DATE__, __TIME__, static_cast<unsigned>(ESP.getCpuFreqMHz()),
@@ -311,6 +337,7 @@ void checkForUpdate() {
   else Serial.printf("up to date: running %s, latest release %s\n", SKYWATCH_VERSION, tag.c_str());
 }
 
+// The `flights` command: the planes found, nearest first.
 void printFlights() {
   if (!fetchedOnce) {
     Serial.println("no data yet");
@@ -324,6 +351,7 @@ void printFlights() {
   }
 }
 
+// Runs one serial command line: the shared parser edits the settings and says what to do next; this applies it.
 void handleLine(const char* line) {
   if (strcasecmp(line, "status") == 0) {
     printStatus();
@@ -387,23 +415,33 @@ void handleLine(const char* line) {
   }
 }
 
+// Collects serial input into lines. A line that does not fit the buffer is refused whole: running its first part
+// could store a cut-off value (a truncated password, for example).
 void pollSerial() {
   static char buf[200];
   static size_t len = 0;
+  static bool overflow = false;  // the current line is longer than the buffer
   while (Serial.available() > 0) {
     const int c = Serial.read();
     if (c == '\n' || c == '\r') {
-      if (len > 0) {
+      if (overflow) {  // never run the first part of a line that did not fit
+        Serial.println("error: line too long (at most 199 characters); nothing was changed");
+        overflow = false;
+        len = 0;
+      } else if (len > 0) {
         buf[len] = '\0';
         len = 0;
         handleLine(buf);
       }
     } else if (len < sizeof buf - 1) {
       buf[len++] = static_cast<char>(c);
+    } else {
+      overflow = true;
     }
   }
 }
 
+// True inside the night window once the clock is valid.
 bool isNightNow() {
   if (!cfg.night_on || !timeValid()) return false;
   const time_t t = time(nullptr);
@@ -413,6 +451,7 @@ bool isNightNow() {
 }
 }  // namespace
 
+// Arduino entry point: serial, settings, display, then start joining the WiFi.
 void setup() {
   Serial.begin(115200);
   delay(100);
@@ -427,6 +466,8 @@ void setup() {
   drawScreen();
 }
 
+// Arduino main loop: serial, (re)connecting, location, fetching, night mode, the FLASH button, the carousel, drawing
+// and the stuck-fetch watchdog.
 void loop() {
   const uint32_t now = millis();
   pollSerial();

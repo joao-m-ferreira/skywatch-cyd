@@ -17,6 +17,7 @@ namespace {
 struct Colors {
   uint16_t paper, ink, faint, accent;
 };
+// The paper-and-ink palette of the plate, converted to the panel's colour format.
 Colors colors(lgfx::LovyanGFX& g) {
   return {static_cast<uint16_t>(g.color565(244, 234, 208)), static_cast<uint16_t>(g.color565(44, 32, 22)),
           static_cast<uint16_t>(g.color565(176, 160, 130)), static_cast<uint16_t>(g.color565(150, 40, 30))};
@@ -153,6 +154,7 @@ void compactField(lgfx::LovyanGFX& g, const Colors& c, const jf::Layout& L, cons
   g.drawString(buf, L.data.x, L.data.y + (L.micro ? 16 : 17));
 }
 
+// One labelled value of the full plate: a small label above a larger value.
 void field(lgfx::LovyanGFX& g, const Colors& c, const jf::Layout& L, jf::Pt at, const char* label, const char* value) {
   g.setTextSize(L.s);
   g.setTextDatum(lgfx::top_left);
@@ -325,6 +327,7 @@ void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
   g.endWrite();
 }
 
+// See plate.h: repaints only the rotating data field of a compact screen.
 bool drawPlateField(lgfx::LovyanGFX& g, const jf::Flight& f, int page, int layout_mode, const char* route) {
   const jf::Layout L = jf::layoutFor(g.width(), g.height(), static_cast<jf::LayoutMode>(layout_mode));
   if (!L.compact) return false;
@@ -462,6 +465,7 @@ void drawPlateOled(lgfx::LovyanGFX& g, const jf::Flight& f, const char* route) {
   g.display();  // a 1-bit OLED is drawn into a buffer and sent here
 }
 
+// A centred message for the monochrome OLED.
 void drawOledMessage(lgfx::LovyanGFX& g, const char* msg, const char* detail) {
   g.startWrite();
   g.fillScreen(0);
@@ -480,6 +484,7 @@ void drawOledMessage(lgfx::LovyanGFX& g, const char* msg, const char* detail) {
   g.display();
 }
 
+// The setup instructions as plain text on the monochrome OLED.
 void drawSetupOled(lgfx::LovyanGFX& g, const char* ap, const char* pass, const char* url, const char* detail) {
   g.startWrite();
   g.fillScreen(0);

@@ -9,7 +9,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 OUT="${1:-build/esp8266-sketch/skywatch_esp8266}"
-SHARED=(flights.cpp flights.h config.cpp config.h airline.cpp airline.h livery.h timing_util.h version.h version_util.h)
+SHARED=(flights.cpp flights.h config.cpp config.h airline.cpp airline.h livery.h timing_util.h crc_util.h version.h version_util.h)
 rm -rf "$OUT" && mkdir -p "$OUT"
 cp firmware/skywatch_esp8266/skywatch_esp8266.ino "$OUT/"
 for f in "${SHARED[@]}"; do cp "firmware/jf_flight_display/$f" "$OUT/$f"; done

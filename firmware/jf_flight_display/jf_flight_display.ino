@@ -121,6 +121,7 @@ void enterSetupMode(const char* why);
 bool hasLed() { return board::kHasLed && !isOled() && !isTDisplay() && !isStick(); }
 int lowBlockCount = 0;
 
+// Readable name of an ESP reset reason, for the boot log and `status`.
 const char* resetName(esp_reset_reason_t r) {
   switch (r) {
     case ESP_RST_POWERON: return "power on";
@@ -135,6 +136,7 @@ const char* resetName(esp_reset_reason_t r) {
     default: return "other";
   }
 }
+// True for resets that mean a crash (panic, watchdog, brownout): those count towards safe mode.
 bool abnormalReset(esp_reset_reason_t r) {
   return r == ESP_RST_PANIC || r == ESP_RST_INT_WDT || r == ESP_RST_TASK_WDT || r == ESP_RST_WDT ||
          r == ESP_RST_BROWNOUT;
@@ -144,6 +146,8 @@ uint32_t wakeMs() { return static_cast<uint32_t>(cfg.wake_min) * 60000UL; }  // 
 
 // ---------------------------------------------------------------- settings in flash
 
+// Loads the settings: the build-time defaults, then this board's macros (firmware/boards.json), then whatever is saved
+// in flash, then a sanity check (flash can hold garbage or another firmware version's values).
 void loadConfig() {
   jf::configDefaults(&cfg, WIFI_SSID, WIFI_PASSWORD, HOME_LAT, HOME_LON, RADIUS_KM,
                      PLANESPOTTERS_CONTACT);
@@ -206,10 +210,16 @@ void loadConfig() {
   cfg.layout = prefs.getInt("layout", cfg.layout);
   cfg.led_pct = prefs.getInt("led", cfg.led_pct);
   prefs.end();
+  const int fixed = jf::configSanitize(&cfg);  // flash can hold garbage or another version's values
+  if (fixed > 0) Serial.printf("warning: %d stored setting(s) were out of range and were reset to defaults\n", fixed);
 }
 
+// Writes every setting to flash; called after each accepted serial command or settings-page save.
 void saveConfig() {
-  prefs.begin("skywatch", false);
+  if (!prefs.begin("skywatch", false)) {
+    Serial.println("error: the settings storage could not be opened; nothing was saved");
+    return;
+  }
   prefs.putString("ssid", cfg.ssid);
   prefs.putString("pass", cfg.pass);
   prefs.putDouble("lat", cfg.lat);
@@ -243,6 +253,7 @@ void saveConfig() {
   prefs.end();
 }
 
+// Logs why, then restarts. The reason stays in the serial log; crashes are counted separately at boot (safe mode).
 void restartNow(const char* why) {
   Serial.printf("restarting: %s\n", why);
   Serial.flush();
@@ -252,6 +263,7 @@ void restartNow(const char* why) {
 
 // ---------------------------------------------------------------- network
 
+// Joins the saved WiFi, waiting up to kWifiTimeoutMs; false (with lastError set) when it did not connect.
 bool connectWifi() {
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
@@ -301,7 +313,7 @@ bool geoLocate() {
         cfg.lon = lo;
         const char* tz = jf::posixTzFor(doc["timezone"] | "");
         if (tz != nullptr && !cfg.tz_set) {
-          strncpy(cfg.tz, tz, sizeof cfg.tz - 1);
+          snprintf(cfg.tz, sizeof cfg.tz, "%s", tz);
           startClock();
         }
         saveConfig();
@@ -325,17 +337,26 @@ class WaitingStream : public Stream {
   int peek() override { return c_->peek(); }
   size_t write(uint8_t) override { return 0; }
   int read() override {
+    if (started_ == 0) started_ = millis() | 1u;  // never 0, which means "not started"
+    // Whatever the server does, one document ends: after kMaxBytes or kMaxMs the stream reports its end (the parser
+    // then fails cleanly with an incomplete-document error and the fetch is retried later).
+    if (total_ >= kMaxBytes || jf::olderThan(millis(), started_, kMaxMs)) return -1;
     const uint32_t t0 = millis();
     while (c_->available() == 0) {
-      if (!c_->connected() || millis() - t0 > 8000) return -1;
+      if (!c_->connected() || jf::olderThan(millis(), t0, 8000)) return -1;
       delay(1);
       esp_task_wdt_reset();
     }
+    ++total_;
     return c_->read();
   }
 
  private:
+  static constexpr size_t kMaxBytes = 400000;   // far above any aircraft list (about 1 KB per plane)
+  static constexpr uint32_t kMaxMs = 30000;     // for the whole document
   WiFiClient* c_;
+  size_t total_ = 0;
+  uint32_t started_ = 0;
 };
 
 // Standalone: query adsb.fi open data directly (HTTPS).
@@ -420,6 +441,8 @@ float ledBrightness() { return static_cast<float>(cfg.led_pct) / 100.0f; }  // 0
 // are balanced first.
 constexpr float kGainR = 1.0f, kGainG = 0.45f, kGainB = 0.8f;
 
+// Shows an RGB colour on the LED: corrected for the LED's unequal channels and scaled to the `led` brightness
+// setting (the LED is active low, so the PWM values are inverted).
 void setLed(int r, int g, int b) {
   const float fr = static_cast<float>(r) * kGainR, fg = static_cast<float>(g) * kGainG,
               fb = static_cast<float>(b) * kGainB;
@@ -434,6 +457,7 @@ void setLed(int r, int g, int b) {
 #endif
 }
 
+// Attaches the LED pins to PWM and flashes red, green, blue once as a boot test. The AMOLED board has no LED.
 void setupLed() {
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
   return;  // no RGB LED on the AMOLED board
@@ -455,6 +479,8 @@ enum LedMode { kLedOff = 0, kLedSteady = 1, kLedTwo = 2 };
 volatile int ledMode = kLedOff;
 volatile int ledA[3] = {0, 0, 0}, ledB[3] = {0, 0, 0};
 
+// Picks the LED pattern for the plane on screen: the airline's colour (blending two colours when it has two),
+// or off for an unknown operator, no plane, or night.
 void ledForPlane(const jf::Flight* f) {
   const jf::Airline* al = f != nullptr ? jf::airlineFor(f->callsign) : nullptr;
   if (al == nullptr || nightMode) {  // unknown operator, no aircraft, or night: LED off
@@ -466,6 +492,8 @@ void ledForPlane(const jf::Flight* f) {
   ledMode = jf::airlineHasTwoColours(*al) ? kLedTwo : kLedSteady;
 }
 
+// Runs on its own task and animates the LED every 25 ms from ledMode, so slow network calls on the main loop never
+// make it stutter.
 void ledTask(void*) {
   for (;;) {
     const int mode = ledMode;
@@ -491,6 +519,8 @@ void message(const char* msg, const char* detail, const char* left, const char* 
   else drawPlateMessage(tft, msg, detail, left, right, error, cfg.layout);
 }
 
+// Draws what the screen should show now: a message (no aircraft, fetch failed) or the plate of the selected plane.
+// A new plane restarts its rotating data pages at distance.
 void drawScreen() {
   if (flightCount > 0 && selected < flightCount && strcmp(pageCall, flights[selected].callsign) != 0) {
     snprintf(pageCall, sizeof pageCall, "%s", flights[selected].callsign);  // a new plane: start again at distance
@@ -541,6 +571,7 @@ int readLdr() {
 #endif
 }
 
+// Sets the backlight from the light sensor (dimmer in the dark), or low during night mode.
 void updateBacklight() {
   lastBacklight = nightMode ? 70 : jf::backlightFor(readLdr());
   tft.setBrightness(lastBacklight);
@@ -548,6 +579,7 @@ void updateBacklight() {
 
 // ---------------------------------------------------------------- serial console
 
+// The `status` command: uptime, memory, WiFi, clock, night mode, last fetch and the reset reason.
 void printStatus() {
   struct tm t;
   char when[32] = "not synced";
@@ -599,6 +631,7 @@ void drawTestCard() {
                  "  garbage / white screen -> set panel st7789 (or ili9341)");
 }
 
+// The `flights` command: the planes found, nearest first.
 void printFlights() {
   if (lastFetchOk == 0) {
     Serial.println("no data yet");
@@ -630,6 +663,8 @@ void onWebSaved() {  // the settings page on the board's address saved something
   netRestart = true;
 }
 
+// A copy of what the board knows for the web page and the MCP server, taken per request (they never read the
+// globals directly).
 jf::McpContext webSnapshot() {
   jf::McpContext c;
   c.flights = flights;
@@ -647,6 +682,7 @@ jf::McpContext webSnapshot() {
   return c;
 }
 
+// Makes a new random access token (120 bits, no look-alike characters) and saves it.
 void makeToken() {
   uint32_t words[4];
   for (uint32_t& w : words) w = esp_random();
@@ -662,6 +698,7 @@ void ensureToken() {
   }
 }
 
+// The `version` command: firmware version, build time and chip.
 void printVersion() {
   Serial.printf("skywatch-cyd %s (built %s %s)\nchip     %s rev %d, %d MHz, %u MB flash, panel %d\n", SKYWATCH_VERSION,
                 __DATE__, __TIME__, ESP.getChipModel(), static_cast<int>(ESP.getChipRevision()),
@@ -709,6 +746,8 @@ void checkForUpdate() {
   }
 }
 
+// Runs one serial command line: the shared parser edits the settings and says what to do next; this applies it
+// (save, restart, redraw, print...).
 void handleLine(const char* line) {
   if (strcasecmp(line, "status") == 0) {
     printStatus();
@@ -793,25 +832,35 @@ void handleLine(const char* line) {
   }
 }
 
+// Collects serial input into lines. A line that does not fit the buffer is refused whole: running its first part
+// could store a cut-off value (a truncated password, for example).
 void pollSerial() {
   static char buf[200];
   static size_t len = 0;
+  static bool overflow = false;  // the current line is longer than the buffer
   while (Serial.available() > 0) {
     const char c = static_cast<char>(Serial.read());
     if (c == '\n' || c == '\r') {
-      if (len > 0) {
+      if (overflow) {  // never run the first part of a line that did not fit: a cut-off 'set pass' would store a wrong password
+        Serial.println("error: line too long (at most 199 characters); nothing was changed");
+        overflow = false;
+        len = 0;
+      } else if (len > 0) {
         buf[len] = '\0';
         len = 0;
         handleLine(buf);
       }
     } else if (len + 1 < sizeof buf) {
       buf[len++] = c;
+    } else {
+      overflow = true;
     }
   }
 }
 
 // ---------------------------------------------------------------- night mode
 
+// True inside the night window (or during `night test`) once the clock is valid.
 bool isNightNow() {
   if (millis() < nightTestUntil) return true;
   if (!cfg.night_on || !timeValid()) return false;
@@ -829,12 +878,14 @@ uint32_t setupSavedAt = 0;
 constexpr uint32_t kSetupAfterMs = 180000;  // WiFi unreachable for this long: open the setup page
 constexpr const char* kSetupUrl = "192.168.4.1";
 
+// Setup page callback: the settings were saved, so try the new WiFi.
 void onPortalSaved() {
   saveConfig();
   jf::photoSetContact(cfg.contact);
   setupSaved = true;
 }
 
+// Shows the setup instructions (network name, password, address) on whatever kind of screen this is.
 void drawSetup(const char* detail) {
   if (isOled()) drawSetupOled(tft, apSsid, apPass, kSetupUrl, detail);
   else drawSetupScreen(tft, apSsid, apPass, kSetupUrl, detail, cfg.layout);
@@ -867,6 +918,7 @@ void enterSetupMode(const char* why) {
   drawSetup("");
 }
 
+// Ends setup mode once the board is online: closes the access point and resumes normal operation.
 void leaveSetupMode() {
   jf::portalStop();
   setupMode = false;
@@ -881,6 +933,8 @@ void leaveSetupMode() {
 
 // ---------------------------------------------------------------- robustness
 
+// Watchdogs that run on every loop pass: WiFi down too long, no fetch for ten minutes, the daily restart, forgiving
+// old crashes, low memory. `sleeping` is true while the screen is off at night.
 void housekeeping(uint32_t now, bool sleeping) {
   esp_task_wdt_reset();
   now = millis();  // the caller's value can be stale by a whole fetch; timestamps below are taken with millis()
@@ -889,7 +943,7 @@ void housekeeping(uint32_t now, bool sleeping) {
   static uint32_t downSince = 0;
   if (WiFi.status() != WL_CONNECTED && jf::configWifiReady(cfg)) {
     if (downSince == 0) downSince = now;
-    if (now - downSince > 45000) {
+    if (jf::olderThan(now, downSince, 45000)) {
       Serial.println("wifi: down for 45 s, reconnecting");
       WiFi.disconnect();
       WiFi.begin(cfg.ssid, cfg.pass);
@@ -919,7 +973,7 @@ void housekeeping(uint32_t now, bool sleeping) {
   // Heap safety net (three low readings in a row, checked every 5 s).
   static uint32_t lastHeapCheck = 0;
   static int low = 0;
-  if (now - lastHeapCheck >= 5000) {
+  if (jf::olderThan(now, lastHeapCheck, 4999)) {
     lastHeapCheck = now;
     low = ESP.getFreeHeap() < kMinFreeHeap ? low + 1 : 0;
     if (low >= 3) restartNow("low memory");
@@ -927,6 +981,7 @@ void housekeeping(uint32_t now, bool sleeping) {
 }
 }  // namespace
 
+// Arduino entry point: settings, display, LED and watchdog, then connect (or open setup mode when no WiFi is saved).
 void setup() {
   new (tftStorage) LGFX();  // see above
   Serial.begin(115200);
@@ -968,6 +1023,8 @@ void setup() {
   lastPoll = millis() - kPollMs;
 }
 
+// Arduino main loop: serial, setup mode, web page / MCP, location and fetching, night mode, touch and button, the
+// carousel, drawing and the watchdogs.
 void loop() {
   uint32_t now = millis();
   pollSerial();
@@ -989,7 +1046,7 @@ void loop() {
       leaveSetupMode();
       return;
     }
-    if (setupSavedAt != 0 && now - setupSavedAt > 25000) {  // the new settings did not connect
+    if (setupSavedAt != 0 && jf::olderThan(now, setupSavedAt, 25000)) {  // the new settings did not connect
       setupSavedAt = 0;
       char d[40];
       snprintf(d, sizeof d, "Could not join %.20s", cfg.ssid);
@@ -1020,7 +1077,7 @@ void loop() {
     offlineSince = 0;
   } else if (offlineSince == 0) {
     offlineSince = now;
-  } else if (!nightMode && now - offlineSince > kSetupAfterMs) {
+  } else if (!nightMode && jf::olderThan(now, offlineSince, kSetupAfterMs)) {
     offlineSince = 0;
     enterSetupMode("WiFi unreachable for 3 minutes");
     return;
@@ -1042,7 +1099,7 @@ void loop() {
     now = millis();
   }
   // Auto location: retry every 10 minutes until a lookup has worked.
-  if (cfg.auto_loc && !geoDone && now - lastGeoTry > 600000 && WiFi.status() == WL_CONNECTED) {
+  if (cfg.auto_loc && !geoDone && jf::olderThan(now, lastGeoTry, 600000) && WiFi.status() == WL_CONNECTED) {
     lastGeoTry = now;
     geoDone = geoLocate();
     if (geoDone) lastPoll = now - kPollMs;
@@ -1050,7 +1107,7 @@ void loop() {
 
   // Night mode: screen and LED off inside the window; a touch wakes it for cfg.wake_min minutes.
   static uint32_t lastNightCheck = 0;
-  if (now - lastNightCheck >= 1000 || lastNightCheck == 0) {
+  if (jf::olderThan(now, lastNightCheck, 999) || lastNightCheck == 0) {
     lastNightCheck = now;
     const bool night = isNightNow();
     if (night != nightMode) {
@@ -1097,7 +1154,7 @@ void loop() {
       drawPlateField(tft, flights[selected], shownPage, cfg.layout, haveRoute ? route : nullptr);
     }
   }
-  if (now - lastPoll >= kPollMs) {
+  if (jf::olderThan(now, lastPoll, kPollMs - 1)) {
     lastPoll = now;
     fetchFailed = !fetchFlights();
     if (fetchFailed) Serial.println("fetch failed; keeping last data");
@@ -1118,7 +1175,7 @@ void loop() {
     static uint32_t downAt = 0;
     const bool down = digitalRead(buttonPin()) == LOW;
     if (down && downAt == 0) downAt = now;
-    if (down && downAt != 0 && now - downAt >= 3000) {
+    if (down && downAt != 0 && jf::olderThan(now, downAt, 2999)) {
       downAt = 0;
       enterSetupMode("button held");
       return;
@@ -1133,13 +1190,13 @@ void loop() {
       }
     }
   }
-  if (flightCount > 1 && now - lastRotate >= planeMs()) {  // carousel
+  if (flightCount > 1 && jf::olderThan(now, lastRotate, planeMs() - 1)) {  // carousel
     selected = (selected + 1) % flightCount;
     lastRotate = now;
     redraw = true;
   }
   static uint32_t lastLdr = 0;
-  if (now - lastLdr > 1000) {
+  if (jf::olderThan(now, lastLdr, 1000)) {
     lastLdr = now;
     updateBacklight();
   }

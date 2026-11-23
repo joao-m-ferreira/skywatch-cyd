@@ -9,6 +9,7 @@
 namespace jf {
 namespace {
 
+// One plane as a JSON object: the fields an assistant needs, never the raw ADS-B record.
 void addFlight(JsonObject o, const Flight& f) {
   o["callsign"] = f.callsign;
   o["aircraft_type"] = f.type;
@@ -23,11 +24,13 @@ void addFlight(JsonObject o, const Flight& f) {
   o["direction"] = compass(f.bearing);
 }
 
+// Serialises `doc` into `out`; returns 0 when it would not fit (nothing partial is ever written).
 size_t finish(JsonDocument& doc, char* out, size_t n) {
   if (n == 0 || measureJson(doc) + 1 > n) return 0;
   return serializeJson(doc, out, n);
 }
 
+// Turns the response into a JSON-RPC error.
 void setError(JsonDocument& res, int code, const char* message) {
   res.remove("result");
   res["error"]["code"] = code;
@@ -43,6 +46,7 @@ void setText(JsonDocument& res, const char* text, bool is_error) {
   r["isError"] = is_error;
 }
 
+// Describes one tool (name, description and a JSON Schema for its input) for tools/list.
 void addTool(JsonArray tools, const char* name, const char* description, bool with_limit) {
   JsonObject t = tools.add<JsonObject>();
   t["name"] = name;
@@ -61,6 +65,7 @@ void addTool(JsonArray tools, const char* name, const char* description, bool wi
 
 }  // namespace
 
+// See mcp.h.
 size_t flightsJson(const McpContext& c, int limit, char* out, size_t n) {
   JsonDocument doc;
   JsonArray arr = doc.to<JsonArray>();
@@ -69,6 +74,7 @@ size_t flightsJson(const McpContext& c, int limit, char* out, size_t n) {
   return finish(doc, out, n);
 }
 
+// See mcp.h.
 size_t statusJson(const McpContext& c, char* out, size_t n) {
   JsonDocument doc;
   doc["firmware"] = c.version;
@@ -85,6 +91,7 @@ size_t statusJson(const McpContext& c, char* out, size_t n) {
   return finish(doc, out, n);
 }
 
+// See mcp.h.
 size_t serverCardJson(const char* host, const char* version, bool auth_required, char* out, size_t n) {
   JsonDocument doc;
   doc["$schema"] = "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json";
@@ -124,6 +131,7 @@ size_t serverCardJson(const char* host, const char* version, bool auth_required,
   return finish(doc, out, n);
 }
 
+// See mcp.h.
 size_t aiCatalogJson(const char* host, char* out, size_t n) {
   JsonDocument doc;
   doc["specVersion"] = "1.0";
@@ -137,6 +145,7 @@ size_t aiCatalogJson(const char* host, char* out, size_t n) {
   return finish(doc, out, n);
 }
 
+// See mcp.h: one JSON-RPC 2.0 request in, one response out (nothing for a notification).
 size_t mcpHandle(const char* body, size_t len, const McpContext& c, char* out, size_t n) {
   JsonDocument req;
   JsonDocument res;
