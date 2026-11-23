@@ -5,6 +5,8 @@ Display") fetches the aircraft around you from open ADS-B data and shows them on
 type, route, altitude, speed, distance, a compass, and a shaded 3D model in the airline's livery
 (or a photo of that exact plane). The board's RGB LED glows in the airline's colour.
 
+**[Open the web portal](https://joao-m-ferreira.github.io/skywatch-cyd/)** to flash a board from your browser in a minute, with nothing to install.
+
 ![3D aircraft models rendered by the firmware's own code (host-side preview)](docs/images/models.png)
 
 <sub>Twelve airlines on twelve aircraft types, rendered on the host from the same 3D code that runs on the board, so the shapes and liveries match; the real screen is 320×240 and looks smaller and blockier. Regenerate with `python3 scripts/readme_image.py`.</sub>
@@ -33,7 +35,7 @@ One **ESP32-2432S028R** (2.8" ILI9341, resistive touch, RGB LED, light sensor) a
 cable, roughly €15–25. Capacitive "IPS" variants use different touch pins and are not supported.
 
 ## Install (flash the prebuilt firmware)
-**Easiest: from your browser.** Open the web portal, choose your board, press **Install**, then type your
+**Easiest: from your browser.** Open the [web portal](https://joao-m-ferreira.github.io/skywatch-cyd/), choose your board, press **Install**, then type your
 WiFi name and password into the page: it sends them to the board over the USB cable. You need Chrome or Edge
 on a computer and a USB *data* cable, and nothing else. The portal is published from this repository's latest
 release (see [Web portal](#web-portal)).
