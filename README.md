@@ -115,7 +115,17 @@ A layout the panel's shape cannot hold falls back (for example `stacked` on a wi
 **Bigger "CYD" boards (3.5", 480x320) are experimental.** `set panel st7796` (or `ili9488`),
 `set backlight 27` and `set touch shared` select what those boards use; the pins are the common ones
 for ESP32-3248S035-style boards and have not been verified on hardware here. Capacitive touch
-(GT911/FT6x36 on I2C), ESP32-S3 / P4 boards and RGB-parallel or QSPI panels are not supported.
+(GT911/FT6x36 on I2C), P4 boards and RGB-parallel panels are not supported.
+
+**ESP32-S3: Waveshare ESP32-S3-Touch-AMOLED-1.8 (368x448 AMOLED) — SIMULATOR ONLY.** The firmware
+builds for this board (an S3 build selects it automatically: QSPI AMOLED, CST820 / FT3168 touch,
+portrait with the stacked layout, no RGB LED or light sensor). It has only ever run in the
+[esp32sim](https://github.com/mikroverk/esp32sim) emulator (`scripts/emu-smoke.sh 60 s3`), where it
+boots, joins WiFi, fetches and draws; it has **not been run on the real board**, the panel power-up
+(AXP2101 / TCA9554) is left as the board starts, and the emulator's panel model does not show windowed
+drawing from LovyanGFX. Build it with
+`arduino-cli compile --fqbn esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB,CDCOnBoot=cdc firmware/jf_flight_display`;
+`set panel sh8601` selects the older V1 panel (also untested). No S3 binary is published in releases.
 
 `status` shows why the board last restarted (power on, software, panic, watchdog, **brownout**), the
 largest free block of memory and the number of crashes in a row. A **brownout** usually means a weak

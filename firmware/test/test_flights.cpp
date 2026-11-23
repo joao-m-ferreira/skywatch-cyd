@@ -284,6 +284,8 @@ int main() {
     CHECK(jf::configCommand(&c, "set panel hx8357", r, sizeof r) == jf::CmdAction::None && c.panel == 0);
     CHECK(jf::configCommand(&c, "set panel st7796", r, sizeof r) == jf::CmdAction::Display && c.panel == 2);
     CHECK(jf::configCommand(&c, "set panel ili9488", r, sizeof r) == jf::CmdAction::Display && c.panel == 3);
+    CHECK(jf::configCommand(&c, "set panel co5300", r, sizeof r) == jf::CmdAction::Display && c.panel == 4);
+    CHECK(jf::configCommand(&c, "set panel sh8601", r, sizeof r) == jf::CmdAction::Display && c.panel == 5);
     jf::configCommand(&c, "set panel ili9341", r, sizeof r);
     CHECK(c.bl_pin == 21 && !c.touch_shared);
     CHECK(jf::configCommand(&c, "set backlight 27", r, sizeof r) == jf::CmdAction::Display && c.bl_pin == 27);

@@ -55,6 +55,7 @@ const char kHelp[] =
     "  set night off|on       disable / enable night mode\n"
     "  set wake <minutes>     how long a touch wakes the screen at night, 1..120 (default 10)\n"
     "  set panel ili9341|st7789|st7796|ili9488  display controller (two-USB CYD: st7789; 3.5in: st7796/ili9488); restarts\n"
+    "  (ESP32-S3 AMOLED board: set panel co5300 (V2, default) or sh8601 (V1))\n"
     "  set backlight <gpio>   backlight pin (21 on 2.8in boards, 27 on 3.5in); restarts\n"
     "  set touch separate|shared  touch on its own SPI bus (2.8in) or the display's (3.5in); restarts\n"
     "  set invert on|off      colour inversion (colours look negative: toggle it); restarts\n"
@@ -172,7 +173,7 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
              c->ssid[0] ? c->ssid : "(not set)", c->pass[0] ? "****" : "(empty)",
              c->auto_loc ? "auto (geojs.io, from your public IP)" : "static", c->lat, c->lon,
              c->radius_km, c->contact, c->night_on ? "on" : "off", c->night_start, c->night_end,
-             c->wake_min, c->tz, c->panel == 1 ? "ST7789" : c->panel == 2 ? "ST7796" : c->panel == 3 ? "ILI9488" : "ILI9341", c->invert ? "on" : "off",
+             c->wake_min, c->tz, c->panel == 1 ? "ST7789" : c->panel == 2 ? "ST7796" : c->panel == 3 ? "ILI9488" : c->panel == 4 ? "CO5300" : c->panel == 5 ? "SH8601" : "ILI9341", c->invert ? "on" : "off",
              c->rgb_swap ? "swap" : "normal", c->rotation,
              c->layout == 1 ? "side" : c->layout == 2 ? "flip" : c->layout == 3 ? "stacked" : "auto", c->led_pct, c->bl_pin,
              c->touch_shared ? "shared bus" : "own bus");
@@ -294,8 +295,10 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
     else if (strcasecmp(value, "st7789") == 0) c->panel = 1;
     else if (strcasecmp(value, "st7796") == 0) c->panel = 2;
     else if (strcasecmp(value, "ili9488") == 0) c->panel = 3;
+    else if (strcasecmp(value, "co5300") == 0) c->panel = 4;  // ESP32-S3 AMOLED board, V2
+    else if (strcasecmp(value, "sh8601") == 0) c->panel = 5;  // ESP32-S3 AMOLED board, V1
     else {
-      snprintf(reply, n, "error: panel is ili9341, st7789, st7796 or ili9488\n");
+      snprintf(reply, n, "error: panel is ili9341, st7789, st7796, ili9488, co5300 or sh8601\n");
       return CmdAction::None;
     }
     display_change = true;

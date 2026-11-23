@@ -1,5 +1,6 @@
 // "Plate" screen: one aircraft on a paper-coloured, ruled plate with its particulars.
 #pragma once
+#include "lgfx_setup.h"
 #include <LovyanGFX.hpp>
 
 #include "flights.h"

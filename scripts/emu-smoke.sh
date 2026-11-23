@@ -4,8 +4,10 @@
 # and checks the console: it must fetch aircraft over HTTPS, draw, stay within time and memory budgets and
 # never panic or reboot. No hardware needed. Needs the internet (adsb.fi and friends are reached for real).
 #
-#   scripts/emu-smoke.sh [seconds] [portrait]   (default 60 emulated seconds, about 10 s of wall time;
-#                                                "portrait" builds with rotation 0: the stacked layout on 240x320)
+#   scripts/emu-smoke.sh [seconds] [landscape|portrait|s3]
+#       default 60 emulated seconds (about 10 s of wall time); "portrait" builds with rotation 0 (the
+#       stacked layout on the CYD's 240x320); "s3" builds for the ESP32-S3 and runs the Waveshare
+#       ESP32-S3-Touch-AMOLED-1.8 (V2) board model. That board is TESTED IN THE SIMULATOR ONLY.
 #
 # Writes build/emu/run.log and build/emu/tft.png (the emulated screen, flipped upright). Real credentials are
 # never used: the firmware is built from a temp copy with a placeholder WiFi network.
@@ -13,6 +15,9 @@
 # Limits of the emulator (early classic-ESP32 support): the screen capture is NOT pixel-faithful (some large
 # LovyanGFX fills are missing and the panel polarity differs from the real board), so this checks the firmware's
 # logic, timing and memory, not how the screen looks. The 3D renders are checked by scripts/test.sh instead.
+# In "s3" mode the emulated AMOLED panel only applies full-window writes: its model expects the QSPI command
+# header as one transfer (as Arduino_GFX sends it), while LovyanGFX sends it in pieces, so windowed drawing is
+# not shown. Boot, WiFi, fetching, draw time and memory are still checked; the display path is not.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 SECS="${1:-60}"
@@ -55,25 +60,36 @@ cat > "$D/fw/jf_flight_display/secrets.h" <<'EOF'
 EOF
 printf '#pragma once\n#define SKYWATCH_VERSION "emu"\n' > "$D/fw/jf_flight_display/version.h"
 [ "$MODE" = portrait ] && sed -i.bak 's/c->rotation = 1;/c->rotation = 0;/' "$D/fw/jf_flight_display/config.cpp"
-arduino-cli compile --fqbn esp32:esp32:esp32:PartitionScheme=huge_app "$D/fw/jf_flight_display" \
+if [ "$MODE" = s3 ]; then
+  FQBN=esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB  # serial on UART0 for the emulator
+else
+  FQBN=esp32:esp32:esp32:PartitionScheme=huge_app
+fi
+arduino-cli compile --fqbn "$FQBN" "$D/fw/jf_flight_display" \
   --build-path "$D/out" --export-binaries >/dev/null
 F="$D/out/jf_flight_display.ino"
 
 # 4. Run it.
 set +e
-timeout $((SECS * 3 + 60)) "$SIM" --chip esp32 --board cyd --boot rom --rom "$D/roms/esp32_rev300_rom.elf" \
+if [ "$MODE" = s3 ]; then
+  CHIPARGS=(--chip s3 --board waveshare-amoled18-v2 --flash-mb 16 --psram-mb 8 --rom "$D/roms/esp32s3_rev0_rom.elf")
+else
+  CHIPARGS=(--chip esp32 --board cyd --rom "$D/roms/esp32_rev300_rom.elf")
+fi
+timeout $((SECS * 3 + 60)) "$SIM" "${CHIPARGS[@]}" --boot rom \
   --console uart0 --bootloader "$F.bootloader.bin" --ptable "$F.partitions.bin" --app "$F.bin" --elf "$F.elf" \
   --wifi ssid=emu-ap,psk=emu-password --tft-png "$D/tft-raw.png" --max-seconds "$SECS" --no-dump \
   > "$D/run.log" 2>&1
 rc=$?
 set -e
 [ "$rc" -eq 0 ] || { echo "FAIL: esp32sim exited with $rc (see $D/run.log)" >&2; exit 1; }
-python3 - "$D" <<'EOF' 2>/dev/null || true
+python3 - "$D" "$MODE" <<'EOF' 2>/dev/null || true
 import sys
 try:
     from PIL import Image, ImageOps
     d = sys.argv[1]
-    ImageOps.flip(Image.open(f"{d}/tft-raw.png").convert("RGB")).save(f"{d}/tft.png")
+    im = Image.open(f"{d}/tft-raw.png").convert("RGB")
+    (im if len(sys.argv) > 2 and sys.argv[2] == "s3" else ImageOps.flip(im)).save(f"{d}/tft.png")
 except Exception:
     pass
 EOF

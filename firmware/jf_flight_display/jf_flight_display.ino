@@ -8,6 +8,7 @@
 #include <esp_heap_caps.h>
 #include <esp_system.h>
 #include <esp_task_wdt.h>
+#include <new>
 #include <time.h>
 
 #include "airline.h"
@@ -30,7 +31,11 @@ constexpr uint32_t kStuckRestartMs = 10UL * 60UL * 1000UL;  // no good fetch for
 constexpr uint32_t kDailyRestartMs = 24UL * 60UL * 60UL * 1000UL;
 constexpr size_t kMinFreeHeap = 30000;
 
-LGFX tft;
+// Constructed in setup(), not as a global: the LGFX constructor runs floating-point code (touch
+// calibration), which the ESP32-S3 forbids in global constructors (they run before the scheduler:
+// "Coprocessor exception" and a boot loop). Found by running the S3 build in the simulator.
+alignas(LGFX) uint8_t tftStorage[sizeof(LGFX)];
+LGFX& tft = *reinterpret_cast<LGFX*>(tftStorage);
 jf::Config cfg;
 Preferences prefs;
 jf::Flight flights[jf::kMaxFlights];
@@ -85,6 +90,10 @@ uint32_t wakeMs() { return static_cast<uint32_t>(cfg.wake_min) * 60000UL; }  // 
 void loadConfig() {
   jf::configDefaults(&cfg, WIFI_SSID, WIFI_PASSWORD, HOME_LAT, HOME_LON, RADIUS_KM,
                      PLANESPOTTERS_CONTACT);
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+  cfg.panel = 4;     // Waveshare AMOLED 1.8 (V2) ...
+  cfg.rotation = 0;  // ... in its native portrait orientation: the stacked layout
+#endif
   prefs.begin("skywatch", true);
   if (prefs.isKey("ssid")) prefs.getString("ssid", cfg.ssid, sizeof cfg.ssid);
   if (prefs.isKey("pass")) prefs.getString("pass", cfg.pass, sizeof cfg.pass);
@@ -329,12 +338,19 @@ void setLed(int r, int g, int b) {
               fb = static_cast<float>(b) * kGainB;
   const float peak = fr > fg ? (fr > fb ? fr : fb) : (fg > fb ? fg : fb);
   const float k = peak > 0.0f ? 255.0f / peak * ledBrightness() : 0.0f;
+#if !defined(CONFIG_IDF_TARGET_ESP32S3)
   ledcWrite(board::kLedR, 255 - static_cast<int>(fr * k));
   ledcWrite(board::kLedG, 255 - static_cast<int>(fg * k));
   ledcWrite(board::kLedB, 255 - static_cast<int>(fb * k));
+#else
+  (void)fr; (void)fg; (void)fb; (void)k;  // no RGB LED on the AMOLED board
+#endif
 }
 
 void setupLed() {
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+  return;  // no RGB LED on the AMOLED board
+#else
   for (int pin : {board::kLedR, board::kLedG, board::kLedB}) ledcAttach(pin, 5000, 8);
   setLed(0, 0, 0);
   const int test[3][3] = {{255, 0, 0}, {0, 255, 0}, {0, 0, 255}};  // boot test: R, G, B
@@ -343,6 +359,7 @@ void setupLed() {
     delay(250);
   }
   setLed(0, 0, 0);
+#endif
 }
 
 // LED state, owned by a small background task so the colours keep animating while the main loop
@@ -409,8 +426,17 @@ void drawScreen() {
             safeMode ? nullptr : jf::photoFor(flights[selected].reg), safeMode, cfg.layout);
 }
 
+// Light sensor: the CYD has an LDR on GPIO 34; the AMOLED board has none (fixed daytime brightness).
+int readLdr() {
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+  return 2000;
+#else
+  return analogRead(board::kLdr);
+#endif
+}
+
 void updateBacklight() {
-  lastBacklight = nightMode ? 70 : jf::backlightFor(analogRead(board::kLdr));
+  lastBacklight = nightMode ? 70 : jf::backlightFor(readLdr());
   tft.setBrightness(lastBacklight);
 }
 
@@ -429,7 +455,7 @@ void printStatus() {
                 WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString().c_str() : "-",
                 WiFi.RSSI(), when, cfg.night_on ? "enabled" : "disabled",
                 nightMode ? " (active now)" : "", screenOff ? "OFF" : "on", lastBacklight,
-                analogRead(board::kLdr), flightCount,
+                readLdr(), flightCount,
                 lastFetchOk ? "ok" : (lastError[0] ? lastError : "none yet"));
   Serial.printf("reset    %s, %d crash(es) in a row%s\nheap     largest block %u\n", resetName(resetReason),
                 crashCount, safeMode ? " - SAFE MODE (no photos, no 3D model)" : "",
@@ -626,6 +652,7 @@ void housekeeping(uint32_t now, bool sleeping) {
 }  // namespace
 
 void setup() {
+  new (tftStorage) LGFX();  // see above
   Serial.begin(115200);
   loadConfig();
   jf::photoSetContact(cfg.contact);
@@ -642,7 +669,7 @@ void setup() {
   tft.init();
   tft.setRotation(cfg.rotation);  // 320x240 landscape (3 = upside down)
   setupLed();
-  xTaskCreatePinnedToCore(ledTask, "led", 3072, nullptr, 1, nullptr, 0);  // animates the LED independently
+  if (board::kHasLed) xTaskCreatePinnedToCore(ledTask, "led", 3072, nullptr, 1, nullptr, 0);  // animates the LED independently
 
   // Hardware watchdog for the main loop: restart if it hangs for 90 s.
   const esp_task_wdt_config_t wdt = {.timeout_ms = kWatchdogMs, .idle_core_mask = 0, .trigger_panic = true};

@@ -4,10 +4,100 @@
 // (320x480) with the backlight on another pin and the touch controller on the display's SPI bus, so
 // all of that is chosen at start-up from the saved settings. The 3.5" setups are experimental.
 #pragma once
+#include "lgfx_setup.h"
 #include <LovyanGFX.hpp>
 
 #include "board.h"
 
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+// ---- ESP32-S3: Waveshare ESP32-S3-Touch-AMOLED-1.8 (tested in the simulator only) ----
+// V2 has a CO5300 panel and a CST820 touch controller, V1 an SH8601 and an FT3168 (panel 5).
+// Power rails (AXP2101) and the reset expander (TCA9554) are left as the board powers up.
+class LGFX : public lgfx::LGFX_Device {
+  lgfx::Panel_CO5300 co5300_;
+  lgfx::Panel_SH8601Z sh8601_;
+  lgfx::Bus_SPI bus_;
+  lgfx::Touch_CST816S cst820_;  // the CST820 is register-compatible
+  lgfx::Touch_FT5x06 ft3168_;
+
+  template <typename P>
+  void setupPanel(P& panel) {
+    auto c = panel.config();
+    c.pin_cs = board::kLcdCs;
+    c.pin_rst = -1;
+    c.panel_width = board::kScreenW;
+    c.panel_height = board::kScreenH;
+    c.memory_width = board::kScreenW + board::kLcdColumnOffset;
+    c.memory_height = board::kScreenH;
+    c.offset_x = board::kLcdColumnOffset;
+    c.offset_y = 0;
+    c.readable = false;
+    c.invert = false;
+    c.rgb_order = false;
+    panel.config(c);
+    panel.setBus(&bus_);
+  }
+  template <typename T>
+  void setupTouch(T& touch, int addr) {
+    auto c = touch.config();
+    c.x_min = 0;
+    c.x_max = board::kScreenW - 1;
+    c.y_min = 0;
+    c.y_max = board::kScreenH - 1;
+    c.pin_int = board::kTouchInt;
+    c.pin_rst = -1;
+    c.bus_shared = true;
+    c.i2c_port = 0;
+    c.i2c_addr = addr;
+    c.pin_sda = board::kI2cSda;
+    c.pin_scl = board::kI2cScl;
+    c.freq = 400000;
+    touch.config(c);
+  }
+
+ public:
+  LGFX() {
+    auto c = bus_.config();
+    c.spi_host = SPI2_HOST;
+    c.spi_mode = 0;
+    c.freq_write = 40000000;
+    c.freq_read = 16000000;
+    c.pin_sclk = board::kLcdSclk;
+    c.pin_io0 = board::kLcdIo0;
+    c.pin_io1 = board::kLcdIo1;
+    c.pin_io2 = board::kLcdIo2;
+    c.pin_io3 = board::kLcdIo3;
+    c.spi_3wire = false;
+    bus_.config(c);
+    useVariant(4, false, false, 0, false);
+  }
+
+  // panel 5 selects the V1 board (SH8601 + FT3168); anything else the V2 (CO5300 + CST820).
+  // Inversion, red/blue order, backlight pin and touch bus do not apply to this board.
+  void useVariant(int panel, bool invert, bool rgb_swap, int, bool) {
+    if (panel == 5) {
+      setupPanel(sh8601_);
+      auto pc = sh8601_.config();
+      pc.invert = invert;
+      pc.rgb_order = rgb_swap;
+      sh8601_.config(pc);
+      setupTouch(ft3168_, board::kTouchAddrV1);
+      sh8601_.setTouch(&ft3168_);
+      setPanel(&sh8601_);
+    } else {
+      setupPanel(co5300_);
+      auto pc = co5300_.config();
+      pc.invert = invert;
+      pc.rgb_order = rgb_swap;
+      co5300_.config(pc);
+      setupTouch(cst820_, board::kTouchAddrV2);
+      co5300_.setTouch(&cst820_);
+      setPanel(&co5300_);
+    }
+  }
+};
+#else
+// ---- classic ESP32: the CYD family ----
 class LGFX : public lgfx::LGFX_Device {
   lgfx::Panel_ILI9341 ili9341_;
   lgfx::Panel_ST7789 st7789_;
@@ -102,3 +192,4 @@ class LGFX : public lgfx::LGFX_Device {
     }
   }
 };
+#endif
