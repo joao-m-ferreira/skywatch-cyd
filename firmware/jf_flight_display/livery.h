@@ -31,7 +31,8 @@ enum Body : uint8_t {
   kBodyTitle = 5,  // white with the airline name as a primary-colour band on the forward fuselage
   kBodyMaersk = 6, // white; primary-colour lower fuselage widening to the tail; name in the secondary colour
   kBodyEmirates = 7, // white; name in the secondary colour (gold); red/black streak on the rear fuselage
-  kBodyEtihad = 8   // name in the primary colour (gold); faceted gold/brown patches on the rear fuselage
+  kBodyEtihad = 8,  // name in the primary colour (gold); faceted gold/brown patches on the rear fuselage
+  kBodyTransat = 9  // white; primary-colour rear fuselage sweeping forward; name in the secondary colour
 };
 
 enum FinBase : uint8_t { kFinPrimary = 0, kFinWhite = 1, kFinSecondary = 2 };

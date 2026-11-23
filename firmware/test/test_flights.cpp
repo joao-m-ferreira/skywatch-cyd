@@ -147,7 +147,7 @@ int main() {
   };
   for (size_t i = 0; i < jf::specCount(); ++i) checkType(jf::specAt(i).prefix);
   for (int tail = jf::kTailBand; tail <= jf::kTailFacet; ++tail) {  // every livery design builds
-    for (int body = jf::kBodyCheat; body <= jf::kBodyEtihad; ++body) {
+    for (int body = jf::kBodyCheat; body <= jf::kBodyTransat; ++body) {
       pal.tail = static_cast<uint8_t>(tail);
       pal.body = static_cast<uint8_t>(body);
       checkType("A320");
@@ -159,7 +159,7 @@ int main() {
   pal.tail = jf::kTailDisc;
   pal.body = jf::kBodyCheat;
   for (const char* ty : {"", "ZZZZ", "EC35", "C172", "GLF5", "AT76", "CRJ9"}) checkType(ty);
-  CHECK(checked == 2 * jf::specCount() + 7 + 108);
+  CHECK(checked == 2 * jf::specCount() + 7 + 120);
   // Types look different from each other.
   CHECK(jf::specFor("A319").length < jf::specFor("A320").length);
   CHECK(jf::specFor("A320").length < jf::specFor("A321").length);

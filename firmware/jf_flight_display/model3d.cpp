@@ -304,13 +304,13 @@ static bool titleBody(size_t seg, int j, const Ring* rg, float h, float L, float
 // Maersk Air Cargo: a blue lower fuselage that widens into an all-blue rear fuselage, and the
 // name in the secondary colour (navy) along the forward fuselage.
 static bool maerskBody(size_t seg, int j, const Palette& pal, const Ring* rg, float h, float L, float nc,
-                       Rgb* out) {
+                       bool front_stripe, Rgb* out) {
   const float d = h - 0.5f * (rg[seg].x + rg[seg + 1].x);
   if (d >= 0.55f * nc && d < nc + 0.28f * L && (j == 2 || j == 10)) {
     *out = pal.secondary;
     return true;
   }
-  const bool lower = d >= 0.5f * nc && j >= 4 && j <= 8;
+  const bool lower = front_stripe ? (d >= 0.5f * nc && j >= 4 && j <= 8) : (d >= 0.58f * L && j >= 4 && j <= 8);
   const bool rear = (d >= 0.66f * L && j >= 3 && j <= 9) || (d >= 0.76f * L && j >= 2 && j <= 10);
   if (!lower && !rear) return false;
   *out = pal.primary;
@@ -434,7 +434,8 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
     if (neo && i >= 5 && i <= 6 && (j == 10 || j == 2)) return pal.dark;  // "raccoon mask"
     if (pal.tail == kTailTap && tapLogo(i, j, pal, rg, h, nc, &logo)) return logo;
     if (pal.body == kBodyEasy && easyBody(i, j, pal, rg, h, L, nc, &logo)) return logo;
-    if (pal.body == kBodyMaersk && maerskBody(i, j, pal, rg, h, L, nc, &logo)) return logo;
+    if (pal.body == kBodyMaersk && maerskBody(i, j, pal, rg, h, L, nc, true, &logo)) return logo;
+    if (pal.body == kBodyTransat && maerskBody(i, j, pal, rg, h, L, nc, false, &logo)) return logo;
     if (pal.body == kBodyEmirates && emiratesBody(i, j, pal, rg, h, L, nc, &logo)) return logo;
     if (pal.body == kBodyEtihad && etihadBody(i, j, pal, rg, h, L, nc, &logo)) return logo;
     if (pal.body == kBodyTitle && titleBody(i, j, rg, h, L, nc)) return pal.primary;
