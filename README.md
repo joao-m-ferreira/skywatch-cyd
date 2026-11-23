@@ -44,7 +44,7 @@ One **ESP32-2432S028R** (2.8" ILI9341, resistive touch, RGB LED, light sensor) a
 cable, roughly €15–25. Capacitive "IPS" variants use different touch pins and are not supported.
 
 ## Install (flash the prebuilt firmware)
-**Easiest: from your browser.** Open the [web portal](https://joao-m-ferreira.github.io/skywatch-cyd/), choose your board, press **Install**, then type your
+**Easiest: from your browser.** Open the [web portal](https://joao-m-ferreira.github.io/skywatch-cyd/), choose your board, press **Install / console**, then type your
 WiFi name and password into the page: it sends them to the board over the USB cable. You need Chrome or Edge
 on a computer and a USB *data* cable, and nothing else. The portal is published from this repository's latest
 release (see [Web portal](#web-portal)).
