@@ -170,6 +170,7 @@ static Rgb finColor(const Palette& pal, float u, float v) {
     case kTailSolid: break;
     case kTailChecker: motif = (static_cast<int>(u * 5.0f) + static_cast<int>(v * 5.0f)) % 2 == 1; break;
     case kTailDiagSplit: motif = (u - 0.6f * v) > 0.3f; break;
+    case kTailCap: motif = v + 0.25f * u > 0.85f; break;  // a motif-coloured cap at the top (Iberia, Norwegian)
     case kTailFacet: {
       // Facets: a hash of the cell picks the colour; gold and brown dominate towards the leading
       // edge and the top, cream and white towards the trailing edge and the root.
@@ -209,7 +210,7 @@ static Rgb finColor(const Palette& pal, float u, float v) {
 static void addPatternFin(float x_le0, float x_te0, float z0, float x_le1, float x_te1, float z1,
                           float half_t, const Palette& pal) {
   // The TAP design needs a finer grid (a little more than the default; the budget is tight).
-  const bool fine = (pal.tail == kTailTap || pal.tail == kTailFlag || pal.tail == kTailFacet) && gMesh.length < 75.0f;
+  const bool fine = (pal.tail == kTailTap || pal.tail == kTailFlag || pal.tail == kTailFacet || pal.tail == kTailCap) && gMesh.length < 75.0f;
   constexpr int NU_MAX = 7, NV_MAX = 6;
   const int NU = fine ? NU_MAX : 6, NV = fine ? NV_MAX : 5;
   for (int side = -1; side <= 1; side += 2) {
@@ -456,8 +457,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   const float x_le_tip = x_le - (b - y_root) * tanL, x_te = x_le - rc;
   const float x_te_tip = x_le_tip - tcd;
   const float t_root = 0.15f * rc, t_tip = 0.12f * tcd + 0.03f;
-  const Rgb wingc = {static_cast<uint8_t>(pal.hull.r * 0.93f), static_cast<uint8_t>(pal.hull.g * 0.93f),
-                     static_cast<uint8_t>(pal.hull.b * 0.95f)};  // slightly grey: shows the planform
+  const Rgb wingc = {234, 232, 228};  // light grey-white whatever the hull tint (real wings are unpainted)  // slightly grey: shows the planform
   auto leAt = [&](float ye) { return x_le - (ye - y_root) * tanL; };
   auto zAt = [&](float ye) { return z_root + dih * (ye - y_root) / (b - y_root); };
 

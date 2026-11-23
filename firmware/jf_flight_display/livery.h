@@ -18,7 +18,8 @@ enum Tail : uint8_t {
   kTailDiagSplit = 8, // everything behind a diagonal line in the motif colour
   kTailTap = 9,       // TAP: red fin, green wedge on the leading edge, white flash, forward logo block
   kTailFlag = 10,     // Emirates: white fin with the UAE flag stripes sweeping up to the top
-  kTailFacet = 11     // Etihad: faceted fin, gold and brown (primary/secondary) fading to cream
+  kTailFacet = 11,    // Etihad: faceted fin, gold and brown (primary/secondary) fading to cream
+  kTailCap = 12       // motif-coloured cap at the top of the fin (Iberia's yellow, Norwegian's red)
 };
 
 // How the fuselage is painted.
