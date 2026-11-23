@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "airline.h"
 #include <TJpg_Decoder.h>
@@ -140,7 +141,9 @@ void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
   if (photo != nullptr && photo->jpg != nullptr) shown_photo = drawPhoto(g, *photo, c);
   if (!shown_photo) {
     const jf::Mesh& mesh = jf::buildAircraft(f.type, pal);
-    static jf::ScreenTri tris[jf::kMaxTris];  // fixed buffer: no per-draw heap allocation
+    // Allocated once and kept (too big for static DRAM; per-draw malloc fragments the heap).
+    static jf::ScreenTri* tris = static_cast<jf::ScreenTri*>(malloc(sizeof(jf::ScreenTri) * jf::kMaxTris));
+    if (tris == nullptr) abort();
     {
       const size_t n = jf::projectMesh(mesh, right, 92, 112, 146, 128, tris, jf::kMaxTris);
       const uint16_t outline = g.color565(20, 24, 32);

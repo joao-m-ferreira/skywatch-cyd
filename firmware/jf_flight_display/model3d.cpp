@@ -10,27 +10,33 @@
 
 namespace jf {
 
-static Mesh gMesh;
+// The mesh lives on the heap, allocated once on first use: it is too big for the static DRAM segment
+// (which is nearly full), and a per-draw malloc fragmented the heap. Never freed.
+static Mesh& gm() {
+  static Mesh* p = static_cast<Mesh*>(calloc(1, sizeof(Mesh)));
+  if (p == nullptr) abort();  // out of memory at first use: restart rather than draw garbage
+  return *p;
+}
 
 static float rad(float d) { return d * static_cast<float>(M_PI) / 180.0f; }
 
 static size_t addV(float x, float y, float z) {
-  if (gMesh.nv >= kMaxVerts) return kMaxVerts - 1;
-  gMesh.v[gMesh.nv] = {x, y, z};
-  return gMesh.nv++;
+  if (gm().nv >= kMaxVerts) return kMaxVerts - 1;
+  gm().v[gm().nv] = {x, y, z};
+  return gm().nv++;
 }
 static void addT(size_t a, size_t b, size_t c, Rgb col) {
-  if (gMesh.nt >= kMaxTris) return;
-  gMesh.t[gMesh.nt++] = {static_cast<uint16_t>(a), static_cast<uint16_t>(b),
+  if (gm().nt >= kMaxTris) return;
+  gm().t[gm().nt++] = {static_cast<uint16_t>(a), static_cast<uint16_t>(b),
                          static_cast<uint16_t>(c), col, 0, 0, 0};
 }
 // A flat quad lying on a surface whose outward direction is (0, side, 0).
 static void addOverlay(float x0, float x1, float z0, float z1, float y, int side, Rgb col) {
   const size_t a = addV(x0, y, z0), b = addV(x1, y, z0), c = addV(x1, y, z1), d = addV(x0, y, z1);
-  if (gMesh.nt + 2 > kMaxTris) return;
-  gMesh.t[gMesh.nt++] = {static_cast<uint16_t>(a), static_cast<uint16_t>(b), static_cast<uint16_t>(c),
+  if (gm().nt + 2 > kMaxTris) return;
+  gm().t[gm().nt++] = {static_cast<uint16_t>(a), static_cast<uint16_t>(b), static_cast<uint16_t>(c),
                          col, 0, static_cast<int8_t>(side), 0};
-  gMesh.t[gMesh.nt++] = {static_cast<uint16_t>(a), static_cast<uint16_t>(c), static_cast<uint16_t>(d),
+  gm().t[gm().nt++] = {static_cast<uint16_t>(a), static_cast<uint16_t>(c), static_cast<uint16_t>(d),
                          col, 0, static_cast<int8_t>(side), 0};
 }
 static void addQuad(size_t a, size_t b, size_t c, size_t d, Rgb col) {
@@ -210,7 +216,7 @@ static Rgb finColor(const Palette& pal, float u, float v) {
 static void addPatternFin(float x_le0, float x_te0, float z0, float x_le1, float x_te1, float z1,
                           float half_t, const Palette& pal) {
   // The TAP design needs a finer grid (a little more than the default; the budget is tight).
-  const bool fine = (pal.tail == kTailTap || pal.tail == kTailFlag || pal.tail == kTailFacet || pal.tail == kTailCap) && gMesh.length < 75.0f;
+  const bool fine = (pal.tail == kTailTap || pal.tail == kTailFlag || pal.tail == kTailFacet || pal.tail == kTailCap) && gm().length < 75.0f;
   constexpr int NU_MAX = 7, NV_MAX = 6;
   const int NU = fine ? NU_MAX : 6, NV = fine ? NV_MAX : 5;
   for (int side = -1; side <= 1; side += 2) {
@@ -430,11 +436,11 @@ static Style styleFor(const char* t, const AircraftSpec& s) {
 
 const Mesh& buildAircraft(const char* type, const Palette& pal) {
   const AircraftSpec& s = specFor(type);
-  gMesh.nv = gMesh.nt = 0;
-  gMesh.length = s.length;
+  gm().nv = gm().nt = 0;
+  gm().length = s.length;
   if (s.mount == Mount::Heli) {
     buildHeli(s, pal);
-    return gMesh;
+    return gm();
   }
   const float L = s.length, h = L / 2.0f, D = s.fuselage_w * 1.3f, R = D / 2.0f;  // a little chunkier than real, for legibility
   const float b = s.span / 2.0f, tanL = tanf(rad(s.sweep_deg));
@@ -665,7 +671,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
       }
     }
   }
-  return gMesh;
+  return gm();
 }
 
 // ---- Projection ----
@@ -674,7 +680,11 @@ size_t projectMesh(const Mesh& m, bool facing_right, int cx, int cy, int box_w, 
                    ScreenTri* out, size_t cap) {
   // Fixed scratch (no heap allocation: repeated malloc/free fragmented the heap on the board):
   // projected x/y and depth for every vertex (view-space x/y are recomputed from them).
-  static float vx[kMaxVerts], vy[kMaxVerts], vd[kMaxVerts];
+  static float* scratch = static_cast<float*>(malloc(3 * kMaxVerts * sizeof(float)));  // once, never freed
+  if (scratch == nullptr) abort();
+  float* const vx = scratch;
+  float* const vy = scratch + kMaxVerts;
+  float* const vd = scratch + 2 * kMaxVerts;
   const float yaw = rad(-40.0f), pitch = rad(24.0f), roll = rad(7.0f);  // seen from above, banked slightly
   const float cr = cosf(roll), sr = sinf(roll);
   const float cyw = cosf(yaw), syw = sinf(yaw), cp = cosf(pitch), sp = sinf(pitch);
