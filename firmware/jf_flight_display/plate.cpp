@@ -115,6 +115,7 @@ void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
     sec = g.color565(al->r2, al->g2, al->b2);
   }
   if (lv.tail == jf::kTailTap) pal.tip = pal.secondary;  // TAP: red winglets
+  if (lv.tail == jf::kTailFlag) pal.tip = {250, 250, 250};  // Emirates: white wingtips
   switch (lv.fin_base) {
     case jf::kFinWhite: pal.fin = {250, 250, 250}; break;
     case jf::kFinSecondary: pal.fin = pal.secondary; break;

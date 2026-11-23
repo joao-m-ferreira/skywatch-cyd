@@ -170,6 +170,15 @@ static Rgb finColor(const Palette& pal, float u, float v) {
     case kTailSolid: break;
     case kTailChecker: motif = (static_cast<int>(u * 5.0f) + static_cast<int>(v * 5.0f)) % 2 == 1; break;
     case kTailDiagSplit: motif = (u - 0.6f * v) > 0.3f; break;
+    case kTailFlag: {
+      // UAE flag: green, white and black stripes rising to the trailing edge, red at the front.
+      const float t = v - 0.5f * u;
+      if (u < 0.3f && v < 0.62f - 0.5f * u) return {200, 16, 46};
+      if (u > 0.2f && t > 0.52f) return {0, 122, 61};
+      if (u > 0.2f && t > 0.40f) return {250, 250, 250};
+      if (u > 0.2f && t > 0.10f) return {22, 22, 24};
+      return pal.fin;
+    }
     case kTailTap: {
       // Red fin; a green wedge hugs the leading edge from the root (narrowing to the top),
       // parted from the red by a thin white flash, and a small white flag near the top.
@@ -188,7 +197,7 @@ static Rgb finColor(const Palette& pal, float u, float v) {
 static void addPatternFin(float x_le0, float x_te0, float z0, float x_le1, float x_te1, float z1,
                           float half_t, const Palette& pal) {
   // The TAP design needs a finer grid (a little more than the default; the budget is tight).
-  const bool fine = pal.tail == kTailTap && gMesh.length < 75.0f;
+  const bool fine = (pal.tail == kTailTap || pal.tail == kTailFlag) && gMesh.length < 75.0f;
   constexpr int NU_MAX = 7, NV_MAX = 6;
   const int NU = fine ? NU_MAX : 6, NV = fine ? NV_MAX : 5;
   for (int side = -1; side <= 1; side += 2) {
@@ -296,6 +305,26 @@ static bool maerskBody(size_t seg, int j, const Palette& pal, const Ring* rg, fl
   return true;
 }
 
+// Emirates: the name in the secondary colour (gold) above the forward windows, and a red streak
+// with a black one above it sweeping along the lower rear fuselage.
+static bool emiratesBody(size_t seg, int j, const Palette& pal, const Ring* rg, float h, float L, float nc,
+                         Rgb* out) {
+  const float d = h - 0.5f * (rg[seg].x + rg[seg + 1].x);
+  if ((j == 2 || j == 10) && d >= 0.9f * nc && d < nc + 0.32f * L) {
+    *out = pal.secondary;
+    return true;
+  }
+  if ((j == 4 || j == 8) && d >= 0.66f * L) {
+    *out = pal.primary;
+    return true;
+  }
+  if ((j == 3 || j == 9) && d >= 0.82f * L) {
+    *out = {22, 22, 24};
+    return true;
+  }
+  return false;
+}
+
 enum Winglet { kWNone, kWFence, kWShark, kWBlend, kWScimitar, kWCant };
 
 static bool hasPrefix(const char* t, const char* p) { return t != nullptr && strncmp(t, p, strlen(p)) == 0; }
@@ -375,6 +404,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
     if (pal.tail == kTailTap && tapLogo(i, j, pal, rg, h, nc, &logo)) return logo;
     if (pal.body == kBodyEasy && easyBody(i, j, pal, rg, h, L, nc, &logo)) return logo;
     if (pal.body == kBodyMaersk && maerskBody(i, j, pal, rg, h, L, nc, &logo)) return logo;
+    if (pal.body == kBodyEmirates && emiratesBody(i, j, pal, rg, h, L, nc, &logo)) return logo;
     if (pal.body == kBodyTitle && titleBody(i, j, rg, h, L, nc)) return pal.primary;
     if (pal.body == kBodyFull && !(i >= 4 && i <= 6 && j == 0)) return pal.primary;
     if (pal.body == kBodyBelly && i >= 5 && (j >= 3 && j <= 8)) return pal.primary;          // coloured belly

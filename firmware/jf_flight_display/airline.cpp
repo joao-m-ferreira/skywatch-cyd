@@ -171,7 +171,7 @@ static const LiveryRow kLiveries[] = {
     {"VLG", {kTailDisc, kBodyCheat, 0, 0, kFinPrimary, kHullWhite, 0}},
     {"SWR", {kTailCross, kBodyCheat, 0, 1, kFinPrimary, kHullWhite, 0}},
     {"WZZ", {kTailSplit, kBodyCheat, 2, 0, kFinPrimary, kHullWhite, 0}},
-    {"UAE", {kTailDiagonal, kBodyCheat, 0, 0, kFinWhite, kHullWhite, 0}},
+    {"UAE", {kTailFlag, kBodyEmirates, 0, 0, kFinWhite, kHullWhite, 0}},
     {"QTR", {kTailDisc, kBodyCheat, 0, 1, kFinPrimary, kHullPearl, 0}},
     {"ETD", {kTailDiagSplit, kBodyCheat, 0, 0, kFinPrimary, kHullChampagne, 0}},
     {"THY", {kTailDisc, kBodyCheat, 0, 1, kFinPrimary, kHullWhite, 0}},

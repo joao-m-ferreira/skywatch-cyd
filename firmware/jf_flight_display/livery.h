@@ -16,7 +16,8 @@ enum Tail : uint8_t {
   kTailCross = 6,     // cross
   kTailChecker = 7,   // checkerboard (Volotea, Azul mosaic)
   kTailDiagSplit = 8, // everything behind a diagonal line in the motif colour
-  kTailTap = 9        // TAP: red fin, green wedge on the leading edge, white flash, forward logo block
+  kTailTap = 9,       // TAP: red fin, green wedge on the leading edge, white flash, forward logo block
+  kTailFlag = 10      // Emirates: white fin with the UAE flag stripes sweeping up to the top
 };
 
 // How the fuselage is painted.
@@ -27,7 +28,8 @@ enum Body : uint8_t {
   kBodyPlain = 3,  // all white, no cheatline
   kBodyEasy = 4,   // easyJet: orange crown on the forward fuselage, orange rear fuselage
   kBodyTitle = 5,  // white with the airline name as a primary-colour band on the forward fuselage
-  kBodyMaersk = 6  // white; primary-colour lower fuselage widening to the tail; name in the secondary colour
+  kBodyMaersk = 6, // white; primary-colour lower fuselage widening to the tail; name in the secondary colour
+  kBodyEmirates = 7 // white; name in the secondary colour (gold); red/black streak on the rear fuselage
 };
 
 enum FinBase : uint8_t { kFinPrimary = 0, kFinWhite = 1, kFinSecondary = 2 };
