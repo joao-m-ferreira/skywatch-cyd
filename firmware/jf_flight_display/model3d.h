@@ -25,8 +25,8 @@ struct Palette {
   Rgb tip;          // winglet / wingtip colour
 };
 
-constexpr size_t kMaxVerts = 1100;   // the largest mesh in the table (An-225, gear down) has ~930; the rest is headroom for detail
-constexpr size_t kMaxTris = 1500;   // ... and ~1280
+constexpr size_t kMaxVerts = 900;    // the largest mesh in the table (An-225, gear down) has ~810
+constexpr size_t kMaxTris = 1250;    // ... and ~1160
 
 struct Vertex {
   float x, y, z;  // x forward (nose +x), y to the right wing, z up; metres

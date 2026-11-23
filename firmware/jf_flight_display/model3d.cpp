@@ -45,16 +45,16 @@ static void addQuad(size_t a, size_t b, size_t c, size_t d, Rgb col) {
 }
 
 // A slab from two quads (loop p0..p3 and loop q0..q3, q above p).
-static void addSlab(const Vertex* p, const Vertex* q, Rgb col) {
+static void addSlab(const Vertex* p, const Vertex* q, Rgb col, bool hide_underside = false) {
   size_t i[8];
   for (int k = 0; k < 4; ++k) i[k] = addV(p[k].x, p[k].y, p[k].z);
   for (int k = 0; k < 4; ++k) i[4 + k] = addV(q[k].x, q[k].y, q[k].z);
-  addQuad(i[0], i[1], i[2], i[3], col);
+  if (!hide_underside) addQuad(i[0], i[1], i[2], i[3], col);
   addQuad(i[4], i[5], i[6], i[7], col);
   addQuad(i[0], i[1], i[5], i[4], col);
   addQuad(i[1], i[2], i[6], i[5], col);
   addQuad(i[2], i[3], i[7], i[6], col);
-  addQuad(i[3], i[0], i[4], i[7], col);
+  if (!hide_underside) addQuad(i[3], i[0], i[4], i[7], col);  // root face: inside the fuselage
 }
 
 // Swept, tapered, thick horizontal surface on one side (sign = +1 right, -1 left).
@@ -69,7 +69,7 @@ static void addHorizontal(float sign, float y_root, float y_tip, float x_le_root
                        {x_le_tip, sign * y_tip, z_tip + t_tip},
                        {x_te_tip, sign * y_tip, z_tip + t_tip},
                        {x_te_root, sign * y_root, z_root + t_root}};
-  addSlab(p, q, col);
+  addSlab(p, q, col, true);  // seen from above: no underside, no root face
 }
 
 // Thin vertical surface in the plane y = y0 (fin, winglet), +-half_t thick.
@@ -134,19 +134,26 @@ struct Ring {
   float x, zc, ry, rz;
 };
 
+// The camera is fixed: it looks at the aircraft's left side from above and in front, so the right
+// side and the belly of the fuselage (segments 2..6 of each ring, angle 0 = top, clockwise seen from
+// the nose) are never visible. Rings from `cull_from` on are built without them.
+static bool hiddenSegment(int j) { return j >= 2 && j <= 6; }
+
 // Lofts rings (listed nose to tail) into triangles; `seg_color(i, j)` colours the quad
 // between ring i and i+1 at ring segment j.
 template <typename F>
-static void loft(const Ring* rings, size_t n, F seg_color) {
-  size_t idx[32][kRing];
+static void loft(const Ring* rings, size_t n, F seg_color, size_t cull_from = static_cast<size_t>(-1)) {
+  size_t idx[32][kRing] = {};
   for (size_t i = 0; i < n; ++i) {
     for (int j = 0; j < kRing; ++j) {
+      if (i > cull_from && j >= 3 && j <= 6) continue;  // inner vertices of hidden segments: not needed
       const float th = 2.0f * static_cast<float>(M_PI) * static_cast<float>(j) / kRing;
       idx[i][j] = addV(rings[i].x, rings[i].ry * sinf(th), rings[i].zc + rings[i].rz * cosf(th));
     }
   }
   for (size_t i = 0; i + 1 < n; ++i) {
     for (int j = 0; j < kRing; ++j) {
+      if (i >= cull_from && hiddenSegment(j)) continue;
       const int k = (j + 1) % kRing;
       addQuad(idx[i][j], idx[i][k], idx[i + 1][k], idx[i + 1][j], seg_color(i, j));
     }
@@ -180,7 +187,7 @@ static Rgb finColor(const Palette& pal, float u, float v) {
     case kTailFacet: {
       // Facets: a hash of the cell picks the colour; gold and brown dominate towards the leading
       // edge and the top, cream and white towards the trailing edge and the root.
-      const unsigned iu = static_cast<unsigned>(u * 7.0f), iv = static_cast<unsigned>(v * 6.0f);
+      const unsigned iu = static_cast<unsigned>(u * 9.0f), iv = static_cast<unsigned>(v * 8.0f);
       const unsigned h = (iu * 73856093u) ^ (iv * 19349663u) ^ 0x9e3779b9u;
       const float r1 = static_cast<float>((h >> 3) % 100) / 100.0f;
       const float r2 = static_cast<float>((h >> 11) % 100) / 100.0f;
@@ -216,10 +223,10 @@ static Rgb finColor(const Palette& pal, float u, float v) {
 static void addPatternFin(float x_le0, float x_te0, float z0, float x_le1, float x_te1, float z1,
                           float half_t, const Palette& pal) {
   // The TAP design needs a finer grid (a little more than the default; the budget is tight).
-  const bool fine = (pal.tail == kTailTap || pal.tail == kTailFlag || pal.tail == kTailFacet || pal.tail == kTailCap) && gm().length < 75.0f;
-  constexpr int NU_MAX = 7, NV_MAX = 6;
-  const int NU = fine ? NU_MAX : 6, NV = fine ? NV_MAX : 5;
-  for (int side = -1; side <= 1; side += 2) {
+  const bool fine = pal.tail == kTailTap || pal.tail == kTailFlag || pal.tail == kTailFacet || pal.tail == kTailCap;
+  constexpr int NU_MAX = 10, NV_MAX = 8;  // only the visible face is built, so the fin can be finer
+  const int NU = fine ? NU_MAX : 7, NV = fine ? NV_MAX : 6;
+  for (int side = -1; side <= -1; ++side) {  // the visible (left) face only
     size_t id[NV_MAX + 1][NU_MAX + 1];
     for (int j = 0; j <= NV; ++j) {
       const float v = static_cast<float>(j) / NV;
@@ -279,8 +286,8 @@ static bool tapLogo(size_t seg, int j, const Palette& pal, const Ring* rg, float
   if (j == 0 || (j >= 5 && j <= 7)) return false;  // roof and belly stay white
   const float d = h - 0.5f * (rg[seg].x + rg[seg + 1].x);  // distance of the segment from the nose
   const float s0 = nc;  // the cabin starts here; its rings are evenly spaced, one band per segment
-  const float w = fabsf(rg[seg].x - rg[seg + 1].x);
-  if (w < 1e-3f || d < s0 || d >= s0 + 4.0f * w) return false;
+  const float w = 0.06f * h;  // band width: 3% of the length, whatever the ring spacing
+  if (d < s0 || d >= s0 + 4.0f * w) return false;
   if (d < s0 + w) *out = pal.primary;                      // lime
   else if (d < s0 + 2.0f * w) *out = {70, 150, 50};        // green
   else *out = pal.secondary;                               // red
@@ -466,7 +473,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
     const float r = fmaxf(0.015f * R, R * sqrtf(1.0f - powf(1.0f - u, st.nose_pow)));  // rounded nose: 2.0 is a hemisphere, lower = slimmer
     rg[nr++] = {h - nc * u, -0.12f * R * (1.0f - u), r, r};
   }
-  constexpr int kCabin = 14;
+  constexpr int kCabin = 18;  // more rings: finer silhouette and livery bands (the hidden half is no longer built)
   for (int i = 1; i < kCabin - 1; ++i) {
     const float t = static_cast<float>(i) / (kCabin - 1);
     rg[nr++] = {(h - nc) + ((-h + tc) - (h - nc)) * t, 0.0f, R, R};
@@ -512,7 +519,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
     if ((j == 3 || j == 8) && pal.body == kBodyCheat) return i >= 5 ? pal.primary : pal.hull;  // cheatline
     if (j >= 4 && j <= 7) return pal.belly;
     return pal.hull;
-  });
+  }, kNose - 1);
 
   // --- Wings: swept, tapered, with dihedral (sharklets on under-wing jets). ---
   const float z_root = high ? 0.75f * R : -0.45f * R;
@@ -661,7 +668,7 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
     const float zc = 0.24f * R, hh = 0.12f * R, yw = sqrtf(R * R - zc * zc);
     const Rgb doorc = {static_cast<uint8_t>(pal.hull.r * 0.95f), static_cast<uint8_t>(pal.hull.g * 0.95f),
                        static_cast<uint8_t>(pal.hull.b * 0.96f)};  // doors: barely darker than the hull
-    for (int sg = -1; sg <= 1; sg += 2) {
+    for (int sg = -1; sg <= -1; ++sg) {  // the left side only: the right side is never visible
       for (int k = 0; k < N; ++k) {
         const float xk = xs - pitch * (static_cast<float>(k) + 0.5f);
         addOverlay(xk - ww / 2, xk + ww / 2, zc - hh, zc + hh, sg * yw * 1.004f, sg, window);
