@@ -18,6 +18,8 @@ void webStart(Config* cfg, McpSnapshot snapshot, void (*on_saved)());
 void webLoop();  // call often
 void webStop();
 bool webActive();
+// Prints where the server can be reached, if it is running and `set debug on` is in effect (nothing otherwise).
+void webLogAddress();
 bool webWantsRestart();  // advertising was switched off while running: the name is withdrawn by restarting
 
 }  // namespace jf

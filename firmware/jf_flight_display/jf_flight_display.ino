@@ -195,6 +195,9 @@ void loadConfig() {
   cfg.mcp_on = prefs.getBool("mcp", cfg.mcp_on);
   cfg.adv_on = prefs.getBool("adv", cfg.adv_on);
   cfg.mcp_auth = prefs.getBool("mcpauth", cfg.mcp_auth);
+  if (prefs.isKey("webopen")) cfg.web_open = prefs.getBool("webopen", cfg.web_open);
+  else if (prefs.isKey("token")) cfg.web_open = false;  // set up by a version that always asked for the login: keep it
+  cfg.debug_log = prefs.getBool("debug", cfg.debug_log);
   if (prefs.isKey("token")) prefs.getString("token", cfg.token, sizeof cfg.token);
   if (prefs.isKey("tz")) prefs.getString("tz", cfg.tz, sizeof cfg.tz);
   cfg.auto_loc = prefs.getBool("aloc", cfg.auto_loc);
@@ -236,6 +239,8 @@ void saveConfig() {
   prefs.putBool("mcp", cfg.mcp_on);
   prefs.putBool("adv", cfg.adv_on);
   prefs.putBool("mcpauth", cfg.mcp_auth);
+  prefs.putBool("webopen", cfg.web_open);
+  prefs.putBool("debug", cfg.debug_log);
   prefs.putString("token", cfg.token);
   prefs.putString("tz", cfg.tz);
   prefs.putBool("aloc", cfg.auto_loc);
@@ -791,9 +796,10 @@ void handleLine(const char* line) {
       ensureToken();
       netRestart = true;  // pick the new settings up
       break;
-    case jf::CmdAction::Redraw:  // layout changed: no restart needed
+    case jf::CmdAction::Redraw:  // layout or debug changed: no restart needed
       saveConfig();
       forceRedraw = true;
+      jf::webLogAddress();  // prints the server's address when 'debug' has just been switched on
       break;
     case jf::CmdAction::Display:  // panel variant changed: it only applies at start-up
       saveConfig();

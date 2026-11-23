@@ -428,6 +428,16 @@ int main() {
     CHECK(c.web_on && c.mcp_on && c.adv_on && c.token[0] == '\0');  // all on by default; the token is made when first needed
     CHECK(jf::configCommand(&c, "set web on", r, sizeof r) == jf::CmdAction::Changed && c.web_on);
     CHECK(jf::configCommand(&c, "set mcp on", r, sizeof r) == jf::CmdAction::Changed && c.mcp_on);
+    CHECK(c.web_open);  // the plane list needs no login by default; the settings always do
+    CHECK(!c.debug_log);  // diagnostics are off by default
+    CHECK(jf::configCommand(&c, "set debug on", r, sizeof r) == jf::CmdAction::Redraw && c.debug_log);  // saved at once, no reconnect
+    CHECK(jf::configCommand(&c, "set debug maybe", r, sizeof r) == jf::CmdAction::None && c.debug_log);
+    CHECK(jf::configCommand(&c, "set debug off", r, sizeof r) == jf::CmdAction::Redraw && !c.debug_log);
+    CHECK(jf::configCommand(&c, "set webauth on", r, sizeof r) == jf::CmdAction::Changed && !c.web_open && c.web_on);
+    CHECK(jf::configCommand(&c, "set webauth off", r, sizeof r) == jf::CmdAction::Changed && c.web_open);
+    CHECK(jf::configCommand(&c, "set webauth on", r, sizeof r) == jf::CmdAction::Changed && !c.web_open);  // (the checks below expect the login)
+    CHECK(jf::configCommand(&c, "set webauth sometimes", r, sizeof r) == jf::CmdAction::None && !c.web_open);
+    CHECK(sizeof(jf::Config) == 336);  // the new flag sits in existing padding: saved settings of every board stay valid
     CHECK(jf::configCommand(&c, "set mcp maybe", r, sizeof r) == jf::CmdAction::None && c.mcp_on);
     CHECK(jf::configCommand(&c, "set web off", r, sizeof r) == jf::CmdAction::Changed && !c.web_on);
     CHECK(jf::configCommand(&c, "set advertise off", r, sizeof r) == jf::CmdAction::Changed && !c.adv_on && c.mcp_on);  // independent switches
@@ -439,7 +449,7 @@ int main() {
     CHECK(jf::configCommand(&c, "token", r, sizeof r) == jf::CmdAction::Token);
     CHECK(jf::configCommand(&c, "token new", r, sizeof r) == jf::CmdAction::NewToken);
     jf::configCommand(&c, "show", r, sizeof r);
-    CHECK(strstr(r, "off, mcp on (header auth off), advertise on, token set") != nullptr && strstr(r, "ABCD2345") == nullptr);  // never printed by 'show'
+    CHECK(strstr(r, "off (login), mcp on (header auth off), advertise on, token set, debug off") != nullptr && strstr(r, "ABCD2345") == nullptr);  // never printed by 'show'
 
     const uint32_t words[4] = {0x12345678u, 0x9ABCDEF0u, 0x0F1E2D3Cu, 0xFFFFFFFFu};
     char tok[25], tok2[25];
