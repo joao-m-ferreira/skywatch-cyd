@@ -45,6 +45,10 @@ struct Mesh {
   float length;  // aircraft length in metres (used to scale small aircraft down)
 };
 
+// The livery colours for a flight, from its callsign (airline) and its height and speed (gear down when low and slow).
+// The display and the web page's 3D view both use it, so they always show the same paint.
+Palette paletteFor(const char* callsign, int alt_ft, int speed_kt);
+
 // Builds the mesh for an ICAO type. Static storage: valid until the next call.
 const Mesh& buildAircraft(const char* icao_type, const Palette& palette);
 
