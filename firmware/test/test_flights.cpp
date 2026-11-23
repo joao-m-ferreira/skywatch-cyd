@@ -7,8 +7,12 @@
 #include "../jf_flight_display/config.h"
 #include "../jf_flight_display/flights.h"
 #include "../jf_flight_display/layout.h"
+#include "../jf_flight_display/mcp.h"
 #include "../jf_flight_display/model3d.h"
+#include "../jf_flight_display/portal_util.h"
 #include "../jf_flight_display/silhouette.h"
+#include "../jf_flight_display/timing_util.h"
+#include "../jf_flight_display/version_util.h"
 
 static int failures = 0;
 #define CHECK(c)                                          \
@@ -277,6 +281,20 @@ int main() {
     CHECK(jf::configCommand(&c, "set wake 15", r, sizeof r) == jf::CmdAction::Changed && c.wake_min == 15);
     CHECK(jf::configCommand(&c, "set wake 0", r, sizeof r) == jf::CmdAction::None && c.wake_min == 15);
     CHECK(jf::configCommand(&c, "set wake 121", r, sizeof r) == jf::CmdAction::None);
+    CHECK(c.plane_sec == 6);  // seconds each plane stays on screen
+    CHECK(jf::configCommand(&c, "set plane 12", r, sizeof r) == jf::CmdAction::Changed && c.plane_sec == 12);
+    CHECK(jf::configCommand(&c, "set plane 2", r, sizeof r) == jf::CmdAction::None && c.plane_sec == 12);
+    CHECK(jf::configCommand(&c, "set plane 121", r, sizeof r) == jf::CmdAction::None && c.plane_sec == 12);
+    CHECK(jf::configCommand(&c, "set plane x", r, sizeof r) == jf::CmdAction::None && c.plane_sec == 12);
+    CHECK(c.max_planes == 10 && static_cast<int>(jf::kMaxFlights) >= jf::kMaxPlanesLimit);  // most planes shown
+    CHECK(jf::configCommand(&c, "set max 4", r, sizeof r) == jf::CmdAction::Changed && c.max_planes == 4);
+    CHECK(jf::configCommand(&c, "set max 20", r, sizeof r) == jf::CmdAction::Changed && c.max_planes == 20);
+    CHECK(jf::configCommand(&c, "set max 0", r, sizeof r) == jf::CmdAction::None && c.max_planes == 20);
+    CHECK(jf::configCommand(&c, "set max 21", r, sizeof r) == jf::CmdAction::None && c.max_planes == 20);
+    CHECK(jf::configCommand(&c, "set max many", r, sizeof r) == jf::CmdAction::None && c.max_planes == 20);
+    jf::Config stick = c;  // a copy: the panel choice must not leak into the checks that follow
+    CHECK(jf::configCommand(&stick, "set panel m5stickc", r, sizeof r) == jf::CmdAction::Display && stick.panel == 8);
+    CHECK(jf::configCommand(&stick, "set panel tdisplay", r, sizeof r) == jf::CmdAction::Display && stick.panel == 7);
     // board variants: display settings restart the board, everything is validated
     CHECK(c.panel == 0 && !c.invert && !c.rgb_swap && c.rotation == 1 && c.led_pct == 100);
     CHECK(jf::configCommand(&c, "set panel st7789", r, sizeof r) == jf::CmdAction::Display && c.panel == 1);
@@ -340,9 +358,9 @@ int main() {
     CHECK(strstr(r, "ILI9341") != nullptr && strstr(r, "rotation 3") != nullptr && strstr(r, "led 40%") != nullptr);
     CHECK(!jf::configSafeMode(0) && !jf::configSafeMode(2) && jf::configSafeMode(3) && jf::configSafeMode(9));
     {  // the whole help text must fit the console reply buffer of the firmware (3000 bytes), with room to spare
-      char big[3000];
+      char big[4096];
       CHECK(jf::configCommand(&c, "help", big, sizeof big) == jf::CmdAction::None);
-      CHECK(strstr(big, "factory") != nullptr && strlen(big) < 2600);
+      CHECK(strstr(big, "factory") != nullptr && strlen(big) < 3800);
     }
     CHECK(jf::configCommand(&c, "set tz CET-1CEST,M3.5.0,M10.5.0/3", r, sizeof r) == jf::CmdAction::Changed && c.tz_set);
     CHECK(jf::configCommand(&c, "set colour red", r, sizeof r) == jf::CmdAction::None);
@@ -358,6 +376,169 @@ int main() {
     char small[16];  // tiny reply buffers never overflow
     jf::configCommand(&c, "help", small, sizeof small);
     CHECK(strlen(small) < sizeof small);
+  }
+
+  // WiFi setup mode helpers and the new serial commands.
+  {
+    const uint8_t mac[6] = {0x24, 0x6F, 0x28, 0x01, 0xAB, 0x05};
+    char name[24], pw[9], pw2[9], esc[64], qr[80];
+    jf::apName(mac, name, sizeof name);
+    CHECK(strcmp(name, "skywatch-AB05") == 0);
+    jf::apPassword(0x12345678u, 0x9ABCDEF0u, pw);
+    jf::apPassword(0x12345679u, 0x9ABCDEF0u, pw2);
+    CHECK(strlen(pw) == 8 && strcmp(pw, pw2) != 0);
+    for (const char* q = pw; *q; ++q) CHECK(strchr("23456789ABCDEFGHJKLMNPQRSTUVWXYZ", *q) != nullptr);  // no 0/O/1/I
+    // every password character is reachable and the alphabet has no look-alikes
+    jf::apPassword(0u, 0u, pw);
+    CHECK(strcmp(pw, "22222222") == 0);
+    jf::apPassword(0xFFFFFFFFu, 0xFFFFFFFFu, pw);
+    CHECK(strcmp(pw, "ZZZZZZZZ") == 0);
+    jf::htmlEscape("a<b>&\"c'", esc, sizeof esc);
+    CHECK(strcmp(esc, "a&lt;b&gt;&amp;&quot;c&#39;") == 0);
+    char tiny[8];
+    jf::htmlEscape("<<<<<<", tiny, sizeof tiny);  // truncated, never overruns, always terminated
+    CHECK(strlen(tiny) < sizeof tiny);
+    CHECK(jf::formValueOk("My WiFi 5G") && !jf::formValueOk("a\nset ssid x") && !jf::formValueOk("a\rb"));
+    jf::wifiQrText("skywatch-AB05", "ABCD2345", qr, sizeof qr);
+    CHECK(strcmp(qr, "WIFI:T:WPA;S:skywatch-AB05;P:ABCD2345;;") == 0);
+    CHECK(strlen(qr) <= 53);  // fits a version 3 QR code (low error correction)
+
+    CHECK(jf::versionNewer("v0.5.0", "0.4.0") && jf::versionNewer("0.4.1", "v0.4.0") && jf::versionNewer("1.0.0", "0.9.9"));
+    CHECK(!jf::versionNewer("v0.4.0", "0.4.0") && !jf::versionNewer("0.3.9", "0.4.0") && !jf::versionNewer("0.10.0", "0.10.1"));
+    CHECK(jf::versionNewer("0.10.0", "0.9.0"));  // numeric, not textual
+    CHECK(!jf::versionNewer("v0.5.0", "dev") && !jf::versionNewer("v0.5.0", "emu") && !jf::versionNewer("garbage", "0.4.0"));
+
+    jf::Config c;
+    jf::configDefaults(&c, "s", "p", 1.0, 2.0, 40, "a@b.pt");
+    char r[4096];
+    CHECK(jf::configCommand(&c, "setup", r, sizeof r) == jf::CmdAction::Setup && strstr(r, "setup mode") != nullptr);
+    CHECK(jf::configCommand(&c, "version", r, sizeof r) == jf::CmdAction::Version);
+    CHECK(jf::configCommand(&c, "update", r, sizeof r) == jf::CmdAction::Update);
+    jf::configCommand(&c, "help", r, sizeof r);
+    CHECK(strstr(r, "  setup ") != nullptr && strstr(r, "  version ") != nullptr && strstr(r, "  update ") != nullptr);
+    CHECK(strlen(r) < 3800);  // the sketch's reply buffer is 4096 bytes
+  }
+
+  // Web portal / MCP server: settings, the access token helpers, and the MCP request handler.
+  {
+    jf::Config c;
+    jf::configDefaults(&c, "s", "p", 1.0, 2.0, 40, "a@b.pt");
+    char r[4096];
+    CHECK(c.web_on && c.mcp_on && c.adv_on && c.token[0] == '\0');  // all on by default; the token is made when first needed
+    CHECK(jf::configCommand(&c, "set web on", r, sizeof r) == jf::CmdAction::Changed && c.web_on);
+    CHECK(jf::configCommand(&c, "set mcp on", r, sizeof r) == jf::CmdAction::Changed && c.mcp_on);
+    CHECK(jf::configCommand(&c, "set mcp maybe", r, sizeof r) == jf::CmdAction::None && c.mcp_on);
+    CHECK(jf::configCommand(&c, "set web off", r, sizeof r) == jf::CmdAction::Changed && !c.web_on);
+    CHECK(jf::configCommand(&c, "set advertise off", r, sizeof r) == jf::CmdAction::Changed && !c.adv_on && c.mcp_on);  // independent switches
+    CHECK(jf::configCommand(&c, "set advertise on", r, sizeof r) == jf::CmdAction::Changed && c.adv_on);
+    CHECK(jf::configCommand(&c, "set advertise sometimes", r, sizeof r) == jf::CmdAction::None && c.adv_on);
+    CHECK(jf::configCommand(&c, "set token ABCD2345EFGH6789", r, sizeof r) == jf::CmdAction::Changed && strcmp(c.token, "ABCD2345EFGH6789") == 0);
+    CHECK(jf::configCommand(&c, "set token short", r, sizeof r) == jf::CmdAction::None && strcmp(c.token, "ABCD2345EFGH6789") == 0);
+    CHECK(jf::configCommand(&c, "set token ABCD2345EFGH678!", r, sizeof r) == jf::CmdAction::None);  // letters and digits only
+    CHECK(jf::configCommand(&c, "token", r, sizeof r) == jf::CmdAction::Token);
+    CHECK(jf::configCommand(&c, "token new", r, sizeof r) == jf::CmdAction::NewToken);
+    jf::configCommand(&c, "show", r, sizeof r);
+    CHECK(strstr(r, "off, mcp on (header auth off), advertise on, token set") != nullptr && strstr(r, "ABCD2345") == nullptr);  // never printed by 'show'
+
+    const uint32_t words[4] = {0x12345678u, 0x9ABCDEF0u, 0x0F1E2D3Cu, 0xFFFFFFFFu};
+    char tok[25], tok2[25];
+    jf::randomToken(words, tok);
+    CHECK(strlen(tok) == 24);
+    for (const char* q = tok; *q; ++q) CHECK(strchr("23456789ABCDEFGHJKLMNPQRSTUVWXYZ", *q) != nullptr);
+    const uint32_t other[4] = {0x12345678u, 0x9ABCDEF0u, 0x0F1E2D3Cu, 0xFFFFFFFEu};
+    jf::randomToken(other, tok2);
+    CHECK(strcmp(tok, tok2) != 0);  // the last word reaches the last characters
+    CHECK(jf::secretEquals("abc", "abc") && !jf::secretEquals("abc", "abd") && !jf::secretEquals("abc", "abcd") && !jf::secretEquals("", "a"));
+    CHECK(strcmp(jf::bearerToken("Bearer xyz"), "xyz") == 0 && jf::bearerToken("Basic xyz")[0] == '\0' && jf::bearerToken("bearer xyz")[0] == '\0');
+
+    // the MCP handler
+    jf::Flight fl[2] = {};
+    snprintf(fl[0].callsign, sizeof fl[0].callsign, "TAP443");
+    snprintf(fl[0].type, sizeof fl[0].type, "A21N");
+    snprintf(fl[0].reg, sizeof fl[0].reg, "CS-TJA");
+    fl[0].alt_ft = 6800; fl[0].speed_kt = 259; fl[0].track = 271; fl[0].dist_km = 22.24f; fl[0].bearing = 180;
+    snprintf(fl[1].callsign, sizeof fl[1].callsign, "RYR9NF");
+    snprintf(fl[1].type, sizeof fl[1].type, "B738");
+    fl[1].alt_ft = 12000; fl[1].dist_km = 30.0f; fl[1].bearing = 90;
+    jf::McpContext ctx;
+    ctx.flights = fl; ctx.count = 2; ctx.selected = 1; ctx.version = "0.5.0"; ctx.uptime_s = 99; ctx.wifi = true;
+    ctx.radius_km = 40; ctx.max_planes = 10; ctx.panel = "m5stickc"; ctx.last_fetch_age_s = 4;
+    char out[8192];
+    const char* init = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}";
+    size_t w = jf::mcpHandle(init, strlen(init), ctx, out, sizeof out);
+    CHECK(w > 0 && strstr(out, "\"protocolVersion\":\"2025-03-26\"") && strstr(out, "skywatch-cyd") && strstr(out, "\"id\":1"));
+    const char* tl = "{\"jsonrpc\":\"2.0\",\"id\":\"a\",\"method\":\"tools/list\"}";
+    w = jf::mcpHandle(tl, strlen(tl), ctx, out, sizeof out);
+    CHECK(strstr(out, "get_nearby_flights") && strstr(out, "get_current_plane") && strstr(out, "get_status") && strstr(out, "\"id\":\"a\""));
+    const char* note = "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}";
+    CHECK(jf::mcpHandle(note, strlen(note), ctx, out, sizeof out) == 0);  // notifications get no response
+    const char* call = "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"get_nearby_flights\",\"arguments\":{\"limit\":1}}}";
+    w = jf::mcpHandle(call, strlen(call), ctx, out, sizeof out);
+    CHECK(strstr(out, "TAP443") && strstr(out, "CS-TJA") && strstr(out, "TAP Portugal") && !strstr(out, "RYR9NF") && strstr(out, "\"isError\":false"));
+    const char* cur = "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"get_current_plane\"}}";
+    w = jf::mcpHandle(cur, strlen(cur), ctx, out, sizeof out);
+    CHECK(strstr(out, "RYR9NF") && !strstr(out, "TAP443"));  // the selected one
+    const char* st = "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"get_status\"}}";
+    w = jf::mcpHandle(st, strlen(st), ctx, out, sizeof out);
+    CHECK(strstr(out, "0.5.0") && strstr(out, "m5stickc") && !strstr(out, "token") && !strstr(out, "ssid") && !strstr(out, "lat"));
+    const char* bad = "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"set_ssid\"}}";
+    jf::mcpHandle(bad, strlen(bad), ctx, out, sizeof out);
+    CHECK(strstr(out, "\"error\"") && strstr(out, "-32602"));  // only the read-only tools exist
+    const char* lim = "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"get_nearby_flights\",\"arguments\":{\"limit\":999}}}";
+    jf::mcpHandle(lim, strlen(lim), ctx, out, sizeof out);
+    CHECK(strstr(out, "-32602"));
+    const char* nope = "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"resources/list\"}";
+    jf::mcpHandle(nope, strlen(nope), ctx, out, sizeof out);
+    CHECK(strstr(out, "-32601"));
+    jf::mcpHandle("{not json", 9, ctx, out, sizeof out);
+    CHECK(strstr(out, "-32700") && strstr(out, "\"id\":null"));
+    jf::mcpHandle("[1,2]", 5, ctx, out, sizeof out);
+    CHECK(strstr(out, "-32700"));
+    char tiny[40];  // a too-small buffer is never overrun
+    w = jf::mcpHandle(tl, strlen(tl), ctx, tiny, sizeof tiny);
+    CHECK(w < sizeof tiny);
+    // discovery documents: the card describes the endpoint and its header, never the token; the catalog points to it
+    char card[1536], cat[512];  // the sizes webapi.cpp uses
+    CHECK(jf::serverCardJson("skywatch.local", "0.5.0", true, card, sizeof card) > 0);
+    CHECK(strstr(card, "\"$schema\":\"https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json\""));
+    CHECK(strstr(card, "\"name\":\"io.github.joao-m-ferreira/skywatch-cyd\"") && strstr(card, "\"version\":\"0.5.0\""));
+    CHECK(strstr(card, "\"type\":\"streamable-http\"") && strstr(card, "http://{host}/mcp") && strstr(card, "\"supportedProtocolVersions\":[\"2025-03-26\"]"));
+    CHECK(strstr(card, "\"name\":\"Authorization\"") && strstr(card, "Bearer {token}") && strstr(card, "\"isSecret\":true"));
+    {
+      JsonDocument parsed;
+      CHECK(!deserializeJson(parsed, card));
+      const char* desc = parsed["description"] | "";
+      const char* nm = parsed["name"] | "";
+      CHECK(strlen(desc) >= 1 && strlen(desc) <= 100);  // the schema's limits
+      const char* slash = strchr(nm, '/');
+      CHECK(slash != nullptr && strchr(slash + 1, '/') == nullptr);  // namespace/name, exactly one slash
+    }
+    CHECK(jf::aiCatalogJson("skywatch.local", cat, sizeof cat) > 0);
+    CHECK(strstr(cat, "\"specVersion\":\"1.0\"") && strstr(cat, "application/mcp-server-card+json") && strstr(cat, "http://skywatch.local/mcp/server-card") && strstr(cat, "urn:air:skywatch.local:mcp:skywatch-cyd"));
+    char small[20];
+    CHECK(jf::serverCardJson("h", "v", true, small, sizeof small) == 0 && jf::aiCatalogJson("h", small, sizeof small) == 0);  // too small: nothing written
+    // MCP header authentication is a switch, off by default; the card lists the headers only when it is on
+    {
+      jf::Config a;
+      jf::configDefaults(&a, "s", "p", 1.0, 2.0, 40, "a@b.pt");
+      CHECK(!a.mcp_auth);
+      CHECK(jf::configCommand(&a, "set mcpauth on", r, sizeof r) == jf::CmdAction::Changed && a.mcp_auth);
+      CHECK(jf::configCommand(&a, "set mcpauth off", r, sizeof r) == jf::CmdAction::Changed && !a.mcp_auth);
+      CHECK(jf::configCommand(&a, "set mcpauth maybe", r, sizeof r) == jf::CmdAction::None);
+      char with[1536], without[1536];
+      CHECK(jf::serverCardJson("skywatch.local", "0.5.0", true, with, sizeof with) > 0);
+      CHECK(jf::serverCardJson("skywatch.local", "0.5.0", false, without, sizeof without) > 0);
+      CHECK(strstr(with, "Bearer {token}") && strstr(with, "X-API-Key"));
+      CHECK(!strstr(without, "headers") && !strstr(without, "Bearer") && strstr(without, "http://{host}/mcp"));
+    }
+    // elapsed time: the stuck-fetch restart fired after every fetch because now - lastGoodMs wrapped to ~49 days
+    CHECK(jf::elapsedMs(1000, 400) == 600 && jf::elapsedMs(400, 1000) == -600);
+    CHECK(jf::elapsedMs(5, 0xFFFFFFF0u) == 21);  // across the wrap of millis()
+    CHECK(!jf::olderThan(700000, 701500, 600000));   // a timestamp 1.5 s in the future is not "10 minutes ago"
+    CHECK(jf::olderThan(700000, 99000, 600000) && !jf::olderThan(700000, 100000, 600000) && jf::olderThan(700000, 99999, 600000));
+    jf::McpContext empty;
+    jf::mcpHandle(cur, strlen(cur), empty, out, sizeof out);
+    CHECK(strstr(out, "No aircraft in range"));
   }
 
   // Screen layouts: every element fits every panel shape in every mode, the plane's area and the
@@ -413,8 +594,35 @@ int main() {
     CHECK(jf::layoutFor(480, 320, jf::LayoutMode::Stacked).mode == jf::LayoutMode::Side);
     CHECK(jf::layoutFor(480, 480, jf::LayoutMode::Side).mode == jf::LayoutMode::Stacked);  // no room for side by side
     CHECK(jf::layoutFor(480, 480, jf::LayoutMode::SideFlip).mode == jf::LayoutMode::Stacked);
+    // short panels (TTGO T-Display, 240x135) get the compact layout: pixel-exact, one rotating data field
+    for (jf::LayoutMode want : {jf::LayoutMode::Auto, jf::LayoutMode::Side, jf::LayoutMode::SideFlip}) {
+      const jf::Layout c = jf::layoutFor(240, 135, want);
+      CHECK(c.compact && c.s == 1.0f && c.cw == 240 && c.ch == 135);
+      CHECK(inside(c, c.model) && inside(c, c.info) && !overlap(c.model, c.info));
+      CHECK(c.model.w >= 100 && c.model.h >= 70);  // room for the plane
+      // rows (heights: bold 9pt 18, oblique 9pt 18, Font2 16, field label 16 + value 24) stay inside the column
+      CHECK(c.call.y + 18 <= c.type.y && c.type.y + 18 <= c.airline.y && c.airline.y + 16 <= c.bars.y);
+      CHECK(c.bars.y < c.rule.y && c.rule.y < c.data.y && c.data.y + 17 + 24 <= c.info.y + c.info.h + 2);
+      CHECK(c.compass.y + 10 <= c.ch && c.dots.y + 4 <= c.model.y);
+    }
+    // the M5StickC's 160x80: the micro variant (no dots, rule or airline name), everything inside the screen
+    for (jf::LayoutMode want : {jf::LayoutMode::Auto, jf::LayoutMode::Side, jf::LayoutMode::SideFlip}) {
+      const jf::Layout m = jf::layoutFor(160, 80, want);
+      CHECK(m.compact && m.micro && m.s == 1.0f && m.cw == 160 && m.ch == 80);
+      CHECK(inside(m, m.model) && inside(m, m.info) && !overlap(m.model, m.info));
+      CHECK(m.model.w >= 60 && m.model.h >= 40);
+      // rows: bold 9pt 18, oblique 9pt 18, bars 3, field label 16 + value 16
+      CHECK(m.call.y + 18 <= m.type.y && m.type.y + 18 <= m.bars.y && m.bars.y + 3 <= m.data.y);
+      CHECK(m.data.y + 16 + 16 <= m.info.y + m.info.h);
+      CHECK(m.compass.y + 7 <= m.ch && m.compass.y - 7 - 6 >= m.model.y + m.model.h);  // compass under the plane
+      CHECK(m.rule_w >= 64 && m.data.x + m.rule_w <= m.info.x + m.info.w + 1);
+    }
+    CHECK(!jf::layoutFor(240, 135).micro && !jf::layoutFor(320, 240).micro);
+    CHECK(!jf::layoutFor(320, 240).compact && !jf::layoutFor(480, 272).compact && !jf::layoutFor(240, 320).compact);
+    CHECK(jf::layoutFor(240, 135, jf::LayoutMode::SideFlip).model.x > jf::layoutFor(240, 135, jf::LayoutMode::SideFlip).info.x);
+    CHECK(jf::layoutFor(240, 135, jf::LayoutMode::Stacked).compact);  // a stack never fits a short panel
     // flipped: the plane is on the right, the text on the left
-    const jf::Layout f = jf::layoutFor(480, 320, jf::LayoutMode::SideFlip);
+    const jf::Layout f =jf::layoutFor(480, 320, jf::LayoutMode::SideFlip);
     CHECK(f.model.x > f.info.x && f.call.x < f.model.x && f.divider_x < f.model.x);
     const jf::Layout n = jf::layoutFor(480, 320, jf::LayoutMode::Side);
     CHECK(n.model.x < n.info.x && n.call.x > n.model.x + n.model.w);

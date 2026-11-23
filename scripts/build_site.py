@@ -26,8 +26,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 STATUSES = {"verified", "untested", "experimental", "simulator"}
-CHIPS = {"ESP32", "ESP32-S2", "ESP32-S3", "ESP32-C3"}
+CHIPS = {"ESP32", "ESP32-S2", "ESP32-S3", "ESP32-C3", "ESP8266"}
 APP_OFFSET = 0x10000
+
+
+def app_offset(board: dict) -> int:
+    """Where the app-only image goes: 0x10000 on the ESP32 family; an ESP8266 has one image at 0."""
+    return int(board.get("appOffset", APP_OFFSET))
 
 
 def load_boards(path: Path = ROOT / "firmware" / "boards.json") -> list[dict]:
@@ -91,12 +96,12 @@ def build(dist: Path, out: Path, boards: list[dict], web: Path = ROOT / "web") -
                             "parts": [{"path": f"../firmware/{ver}/{found['merged'].name}", "offset": 0}]}]}
         upd = {"name": title + " (update, keeps settings)", "version": ver, "new_install_prompt_erase": False,
                "builds": [{"chipFamily": b["chipFamily"],
-                           "parts": [{"path": f"../firmware/{ver}/{found['firmware'].name}", "offset": APP_OFFSET}]}]}
+                           "parts": [{"path": f"../firmware/{ver}/{found['firmware'].name}", "offset": app_offset(b)}]}]}
         (out / "manifests" / f"{b['id']}.json").write_text(json.dumps(full, indent=2) + "\n")
         (out / "manifests" / f"{b['id']}-update.json").write_text(json.dumps(upd, indent=2) + "\n")
         published.append({**{k: b[k] for k in ("id", "name", "short", "chipFamily", "status", "notes")},
                           "title": b.get("title", b["short"]), "tagline": b.get("tagline", ""), "tab": b.get("tab", b["short"]),
-                          "version": ver,
+                          "version": ver, "appOffset": app_offset(b),
                           "mergedBytes": found["merged"].stat().st_size,
                           "firmwareBytes": found["firmware"].stat().st_size,
                           "mergedSha256": sha256(found["merged"]),
@@ -128,7 +133,7 @@ def check_site(out: Path) -> list[str]:
                     target = (mp.parent / part["path"]).resolve()
                     if not target.is_file():
                         errors.append(f"{mp.name}: {part['path']} does not exist")
-                    if part["offset"] != (0 if suffix == "" else APP_OFFSET):
+                    if part["offset"] != (0 if suffix == "" else app_offset(b)):
                         errors.append(f"{mp.name}: wrong offset {part['offset']}")
     for need in ("index.html", "app.js", "style.css", "config.json"):
         if not (out / need).is_file():

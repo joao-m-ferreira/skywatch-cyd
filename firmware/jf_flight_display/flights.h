@@ -7,7 +7,7 @@
 
 namespace jf {
 
-constexpr size_t kMaxFlights = 8;
+constexpr size_t kMaxFlights = 20;  // capacity; the 'max' setting (default 10) picks how many are shown, nearest first
 
 struct Flight {
   char callsign[12];

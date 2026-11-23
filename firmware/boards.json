@@ -46,6 +46,36 @@
       "tab": "CYD 3.5\""
     },
     {
+      "id": "ttgo-tdisplay",
+      "name": "LilyGO TTGO T-Display (1.14\" ST7789, 240x135)",
+      "short": "TTGO T-Display",
+      "title": "TTGO T-Display",
+      "tagline": "A tiny colour screen with the 3D plane; each plane cycles distance, altitude and speed.",
+      "tab": "TTGO T-Display",
+      "chipFamily": "ESP32",
+      "fqbn": "esp32:esp32:esp32:PartitionScheme=huge_app",
+      "bootloaderOffset": 4096,
+      "flashBytes": 4194304,
+      "flags": "-DSKYWATCH_PANEL=7",
+      "status": "verified",
+      "notes": "Tested on a TTGO T-Display v1.1. No touch: the left button (GPIO 0) shows the next plane; hold it for 3 s to open the WiFi setup page."
+    },
+    {
+      "id": "m5stickc",
+      "name": "M5StickC (ESP32-PICO-D4, 0.96\" ST7735S 160x80)",
+      "short": "M5StickC",
+      "title": "M5StickC",
+      "tagline": "A pocket-sized ESP32 with a tiny colour screen: the plane, callsign and one value at a time.",
+      "tab": "M5StickC",
+      "chipFamily": "ESP32",
+      "fqbn": "esp32:esp32:esp32:PartitionScheme=huge_app",
+      "bootloaderOffset": 4096,
+      "flashBytes": 4194304,
+      "flags": "-DSKYWATCH_PANEL=8",
+      "status": "verified",
+      "notes": "Tested on an M5StickC (the original, 80x160 screen), not on the C Plus or Plus2. No touch: button A shows the next plane; hold it for 3 s to open the WiFi setup page."
+    },
+    {
       "id": "amoled18",
       "name": "Waveshare ESP32-S3-Touch-AMOLED-1.8 (368x448, V2: CO5300 + CST820)",
       "short": "Waveshare S3 AMOLED 1.8\"",
@@ -89,6 +119,23 @@
       "flags": "-DSKYWATCH_PANEL=6 -DSKYWATCH_I2C_SDA=5 -DSKYWATCH_I2C_SCL=4",
       "status": "experimental",
       "notes": "Pins are the common ones for these boards; boards differ (use 'set i2c <sda> <scl>' if the screen stays blank). Never tested."
+    },
+    {
+      "id": "esp8266-oled",
+      "name": "ESP8266 with the 0.96\" OLED built in (ESP-12 style board, I2C on GPIO 14 and 12)",
+      "short": "ESP8266 + OLED",
+      "title": "ESP8266 with a 0.96\" OLED",
+      "tagline": "The same text display on the small ESP8266 boards: callsign, airline, altitude, speed and distance.",
+      "tab": "ESP8266 OLED",
+      "chipFamily": "ESP8266",
+      "sketch": "esp8266",
+      "fqbn": "esp8266:esp8266:nodemcuv2",
+      "bootloaderOffset": 0,
+      "appOffset": 0,
+      "flashBytes": 4194304,
+      "flags": "-DSKYWATCH_I2C_SDA=14 -DSKYWATCH_I2C_SCL=12",
+      "status": "experimental",
+      "notes": "Tested on one ESP-12 board with an OLED on GPIO 14/12 (live fetching, location, clock and display). A single image at 0x0, so install and update are the same file; settings are kept. Text only, with no web page or MCP server; free memory is tight (about 10 KB during a fetch). Other pins: set i2c <sda> <scl>."
     }
   ]
 }

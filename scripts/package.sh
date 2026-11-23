@@ -5,6 +5,7 @@
 #
 #   skywatch-cyd-<V>-<board>-merged.bin    full flash image: flash at 0x0 (also erases saved settings)
 #   skywatch-cyd-<V>-<board>-firmware.bin  app only: flash at 0x10000 (keeps saved settings)
+# An ESP8266 board ("sketch": "esp8266" in boards.json) has one image at 0x0: both files are that same image.
 #
 # Only boards whose firmware/boards.json "release" is not false are built (default: all). Env BOARDS="cyd amoled18"
 # restricts the run (used for quick local checks).
@@ -20,13 +21,26 @@ import json, sys
 want = set(sys.argv[1].split())
 for b in json.load(open("firmware/boards.json"))["boards"]:
     if b.get("release", True) and (not want or b["id"] in want):
-        print("\t".join([b["id"], b["fqbn"], b["flags"]]))
+        print("\t".join([b["id"], b["fqbn"], b["flags"] or "-", b.get("sketch", "esp32")]))
 PY
 [ -s build/pkg/boards.tsv ] || { echo "no boards selected" >&2; exit 1; }
-while IFS=$'\t' read -r id fqbn flags; do
+while IFS=$'\t' read -r id fqbn flags sketch; do
+  [ "$flags" = "-" ] && flags=""
   echo "building $id"
-  arduino-cli compile --fqbn "$fqbn" ${flags:+--build-property "compiler.cpp.extra_flags=$flags"} \
-    build/pkg/jf_flight_display --build-path "build/pkg/out-$id" --export-binaries >/dev/null
-  cp "build/pkg/out-$id/jf_flight_display.ino.merged.bin" "dist/skywatch-cyd-${VERSION}-${id}-merged.bin"
-  cp "build/pkg/out-$id/jf_flight_display.ino.bin" "dist/skywatch-cyd-${VERSION}-${id}-firmware.bin"
+  if [ "$sketch" = esp8266 ]; then
+    # the ESP8266 sketch plus the code it shares with the ESP32 build, staged into one folder; the build is a
+    # single image flashed at 0x0, published under both names (install and update are the same file)
+    S=build/pkg/esp8266/skywatch_esp8266
+    bash scripts/stage_esp8266.sh "$S" >/dev/null
+    printf '#pragma once\n#define SKYWATCH_VERSION "%s"\n' "$VERSION" > "$S/version.h"
+    arduino-cli compile --fqbn "$fqbn" ${flags:+--build-property "compiler.cpp.extra_flags=$flags"} \
+      "$S" --build-path "build/pkg/out-$id" --export-binaries >/dev/null
+    cp "build/pkg/out-$id/skywatch_esp8266.ino.bin" "dist/skywatch-cyd-${VERSION}-${id}-merged.bin"
+    cp "build/pkg/out-$id/skywatch_esp8266.ino.bin" "dist/skywatch-cyd-${VERSION}-${id}-firmware.bin"
+  else
+    arduino-cli compile --fqbn "$fqbn" ${flags:+--build-property "compiler.cpp.extra_flags=$flags"} \
+      build/pkg/jf_flight_display --build-path "build/pkg/out-$id" --export-binaries >/dev/null
+    cp "build/pkg/out-$id/jf_flight_display.ino.merged.bin" "dist/skywatch-cyd-${VERSION}-${id}-merged.bin"
+    cp "build/pkg/out-$id/jf_flight_display.ino.bin" "dist/skywatch-cyd-${VERSION}-${id}-firmware.bin"
+  fi
 done < build/pkg/boards.tsv

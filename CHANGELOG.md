@@ -5,6 +5,18 @@ Releases follow [Semantic Versioning](https://semver.org/). Each release has not
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-23
+- **WiFi setup mode:** with no WiFi saved, or none reachable for 3 minutes, the board opens its own WiFi (`skywatch-XXXX`, random password) and a captive settings page for WiFi, location, radius, seconds per plane and night mode. The screen shows a QR code, the name, the password and the address. `setup` over serial or a 3 s button hold starts it by hand.
+- **TTGO T-Display** (`ttgo-tdisplay`, 240x135) and **M5StickC** (`m5stickc`, 160x80) boards, both tested on real hardware, with compact layouts that show one value at a time (distance, altitude, speed) and the button for the next plane.
+- `set plane <seconds>` (time per plane, shared between the values on small screens) and `set max <planes>` (most planes shown, default 10, up to 20).
+- `version` shows the firmware version, build date and board; `update` checks GitHub for a newer release.
+- Message screens shrink their font to fit narrow screens.
+- **ESP8266 with a 0.96" OLED** (`esp8266-oled`): a separate text-only build that shares the flight parsing, the OLED text and the serial commands with the ESP32 build; one image at `0x0` (install and update are the same file, settings are kept). Tested on one board. No 3D model, photos, setup page, web page or MCP server.
+- **The aircraft list is parsed straight off the connection** (ArduinoJson filter over a stream that waits for the network) instead of being collected in a 5-10 KB string first: lower peak memory and, in the emulator, 15 good fetches out of 15 where the old code managed about half. Found while porting to the ESP8266, where collecting the body silently lost chunks.
+- **Fixed: the board restarted itself about every 10 minutes after boot.** The "no successful fetch for 10 minutes" check compared the time with a timestamp taken a moment later during the fetch, which wrapped to about 49 days, so the first good fetch after 10 minutes of uptime looked like a failure. Found by the emulator test; the comparison is now signed and tested.
+- MCP authentication through HTTP headers (`Authorization: Bearer` or `X-API-Key`) is a switch, `set mcpauth on|off`, **off by default**; the web page and settings always need the token.
+- **Web page and MCP server** on the board (on by default; `set web on|off`, `set mcp on|off`, `set advertise on|off` or the setup page switch each one): the planes and the settings at `http://skywatch.local/`, and a read-only MCP endpoint at `/mcp`, both behind an access token (`token`, `token new`). Discovery (`advertise`) through mDNS (`skywatch.local`, `_mcp._tcp`), an MCP Server Card at `/mcp/server-card` and an AI Catalog at `/.well-known/ai-catalog.json`. Written from the MCP specification (the `mcpesp` library that inspired it has no licence, so none of its code is used). Tested in the esp32sim emulator (`scripts/emu-web.sh`), not on a real board.
+
 ## [0.4.0] - 2026-11-23
 - A text-only version for boards with a 0.96" SSD1306 OLED (`oled96`, `oled96-onboard`): the same firmware without the 3D model, `set panel ssd1306`, `set i2c <sda> <scl>`, BOOT button for the next plane.
 - The web portal has a Download firmware button next to Install for every board.

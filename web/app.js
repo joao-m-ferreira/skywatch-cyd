@@ -122,6 +122,10 @@
     } else {
       cmds.push(["set night off", "Night mode"]);
     }
+    // Firmware older than 0.5.0 does not know these three settings and refuses them: the third item marks them optional.
+    cmds.push([`set web ${$("web-on").checked ? "on" : "off"}`, "Web page", true]);
+    cmds.push([`set mcp ${$("mcp-on").checked ? "on" : "off"}`, "MCP server", true]);
+    cmds.push([`set advertise ${$("adv-on").checked ? "on" : "off"}`, "Network announcement", true]);
     return cmds;
   }
 
@@ -138,12 +142,12 @@
       try { while (alive) { const { value, done } = await reader.read(); if (done) break; inbox += dec.decode(value); } } catch (e) { /* closed */ }
     })();
     return {
-      async send(line, ms = 4000) {
+      async send(line, ms = 4000, expect = /^(ok|error)[^\n]*/m) {
         inbox = "";
         await writer.write(new TextEncoder().encode(line + "\n"));
         const t0 = Date.now();
         while (Date.now() - t0 < ms) {
-          const m = inbox.match(/^(ok|error)[^\n]*/m);
+          const m = inbox.match(expect);
           if (m) return m[0];
           await sleep(50);
         }
@@ -177,14 +181,26 @@
     try {
       await sleep(600);
       const done = [];
-      for (const [cmd, label] of cmds) {
+      let newSettings = true;  // false once an older firmware refused one of the 0.5.0 settings
+      for (const [cmd, label, optional] of cmds) {
         status(`${done.join("\n")}${done.length ? "\n" : ""}Sending: ${label}...`);
         const reply = await s.send(cmd);
+        if (!reply.startsWith("ok") && optional && /unknown setting/.test(reply)) { newSettings = false; continue; }
         if (!reply.startsWith("ok")) throw new Error(`${label}: ${reply.replace(/^error:\s*/, "")}`);
         done.push(`✓ ${label}`);
         if (cmd.startsWith("set ssid") || cmd.startsWith("set pass")) await sleep(300);
       }
-      status(`${done.join("\n")}\n\nAll set. The board is connecting to your WiFi; the first plane should appear within a minute.`, "ok");
+      let extra = "";
+      if (newSettings && ($("web-on").checked || $("mcp-on").checked)) {  // the board made an access token: show it once, here
+        let token = "";
+        try { token = (await s.send("token", 4000, /^access token: \S+/m)).slice("access token: ".length); } catch (e) { /* none yet */ }
+        const host = $("adv-on").checked ? "skywatch.local" : "<the board's IP address>";
+        if (token) {
+          extra = `\n\nAccess token (keep it private): ${token}\nOn your network: http://${host}/` +
+            ($("mcp-on").checked ? `\nMCP endpoint: http://${host}/mcp  with the header  Authorization: Bearer ${token}` : "");
+        }
+      }
+      status(`${done.join("\n")}\n\nAll set. The board is connecting to your WiFi; the first plane should appear within a minute.${extra}`, "ok");
     } catch (e) {
       status(e.message === "timeout"
         ? "The board didn't answer. Make sure the skywatch-cyd firmware is installed, then press the board's reset button and try again."

@@ -50,6 +50,10 @@
         <label>How far to look (km) <input id="radius" type="number" min="1" max="250" value="40"></label>
         <label class="check"><input id="night" type="checkbox"> Turn the screen off at night
           <span class="inline">from <input id="night-from" type="number" min="0" max="23" value="1"> to <input id="night-to" type="number" min="0" max="23" value="5"> h</span></label>
+        <label class="check"><input id="web-on" type="checkbox" checked> Web page on the board (firmware 0.5.0 or newer)</label>
+        <label class="check"><input id="mcp-on" type="checkbox" checked> MCP server for AI assistants, read-only</label>
+        <label class="check"><input id="adv-on" type="checkbox" checked> Announce the board on the network (skywatch.local)</label>
+        <p class="hint">Untick any of them to switch it off. The web page and the MCP server need an access token that the board makes and shows here.</p>
       </details>
       <button class="btn" id="send" type="submit">Connect to my board and send</button>
     </form>
