@@ -1,0 +1,16 @@
+name = "skywatch-flash-counter"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# Create the namespace once with:  npx wrangler kv namespace create COUNTS
+# and paste the id it prints here.
+[[kv_namespaces]]
+binding = "COUNTS"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+[vars]
+# The portal's origin(s), comma separated. Requests from anywhere else are refused.
+ALLOWED_ORIGIN = "https://joao-m-ferreira.github.io"
+# The board ids from firmware/boards.json (anything else is ignored).
+BOARDS = "cyd,cyd-st7789,cyd35,amoled18"
+# Set a secret salt for the short-lived duplicate check:  npx wrangler secret put SALT

@@ -4,6 +4,8 @@ Releases follow [Semantic Versioning](https://semver.org/). Each release has not
 `docs/releases/<version>.md`, and its binaries are attached to the GitHub release.
 
 ## [Unreleased]
+- Release builds for every hardware model (`firmware/boards.json`): CYD 2.8" (tested), CYD two-USB, 3.5" CYD and the Waveshare S3 AMOLED, each with its panel settings built in and an honest test status.
+- A web portal (`web/`) that flashes a board from the browser and sets the WiFi, location, search distance and night mode over USB; published by GitHub Pages. Optional Cloudflare Worker to count flashes.
 - Board variants: `set panel ili9341|st7789`, `set invert`, `set rgb swap`, `set rotation 3`, and a `display test` colour card to identify a variant.
 - Stability: bodies are read to their Content-Length (no more half-parsed documents), a fragmented heap skips the fetch instead of failing, the reset reason and crash count are shown in `status`, and three crashes in a row start a safe mode (no photos or 3D model).
 - Screen layouts that adapt to the panel: plane left / right / on top (`set layout auto|side|flip|stacked`), portrait rotations, and an auto choice by panel shape; the default 320x240 plate is unchanged. Experimental ST7796 / ILI9488 3.5" panels, backlight pin and shared touch bus settings.

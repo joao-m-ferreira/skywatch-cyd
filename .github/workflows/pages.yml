@@ -1,0 +1,59 @@
+# Publishes the web-flash portal (web/) with the firmware of the latest release to GitHub Pages.
+# Runs after the Release workflow succeeds (a release published by GITHUB_TOKEN does not fire the
+# `release` event, but it does fire `workflow_run`), or by hand with an optional tag.
+# One-time setup: Settings -> Pages -> Source: "GitHub Actions" (the repository must be public, or on a
+# plan that allows Pages for private repositories).
+name: Pages
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (default: the latest release)"
+        required: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # actions are pinned to commit SHAs: a deployment is not the place for a moving tag
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+      - name: Fetch the release files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          RUN_TAG: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          tag="${INPUT_TAG:-$RUN_TAG}"
+          if [ -z "$tag" ]; then tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName); fi
+          echo "publishing $tag"
+          mkdir dist
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern 'skywatch-cyd-*.bin' --dir dist
+      - name: Build the site
+        run: python3 scripts/build_site.py --dist dist --out site
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

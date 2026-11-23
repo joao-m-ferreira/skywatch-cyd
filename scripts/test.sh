@@ -8,3 +8,6 @@ mkdir -p build
 g++ -std=c++17 -Wall -Wextra -Werror -I"$AJ_DIR" \
   firmware/test/test_flights.cpp firmware/jf_flight_display/flights.cpp firmware/jf_flight_display/silhouette.cpp firmware/jf_flight_display/airline.cpp firmware/jf_flight_display/model3d.cpp firmware/jf_flight_display/config.cpp -o build/test_flights
 build/test_flights
+# the web-flash portal builder, and the flash counter worker (when node is installed)
+python3 scripts/build_site.py --self-test
+if command -v node >/dev/null 2>&1; then node --test workers/flash-counter/; fi

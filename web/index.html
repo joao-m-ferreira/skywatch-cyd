@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>skywatch-cyd: see the planes flying over you</title>
+  <meta name="description" content="Turn a small ESP32 touchscreen into a live display of the aircraft flying over your home. Install it from your browser.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2396281e'/%3E%3Cpath d='M5 19l22-7-2 4-8 2-3 6-3-1 2-5-7 2z' fill='%23f6f0e0'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <!-- ESP Web Tools (Apache-2.0, Nabu Casa): the flasher. Pinned to an exact version. -->
+  <script type="module" src="https://unpkg.com/esp-web-tools@10.5.2/dist/web/install-button.js?module"></script>
+</head>
+<body>
+<header>
+  <img src="img/plane-1.png" alt="" class="hero-plane">
+  <h1>See the planes flying over your home</h1>
+  <p class="lead">Put this on a small ESP32 touchscreen and it shows the aircraft nearby, with a 3D model in the airline's colours.</p>
+</header>
+
+<main>
+  <p id="unsupported" class="notice" hidden>
+    This needs <b>Chrome</b> or <b>Edge</b> on a computer (not a phone), because it talks to your board over USB.
+  </p>
+
+  <section id="boards">
+    <h2><span class="n">1</span> Choose your board and install</h2>
+    <p class="hint">Plug the board in with a USB data cable, then press Install.</p>
+    <div id="board-list"><p>Loading&hellip;</p></div>
+  </section>
+
+  <section id="setup">
+    <h2><span class="n">2</span> Connect it to your WiFi</h2>
+    <p class="hint">Stays between this page and your board over the USB cable. Nothing is sent to any server.</p>
+    <form id="setup-form" autocomplete="off">
+      <label>WiFi name <input id="ssid" required maxlength="32" autocapitalize="off" spellcheck="false"></label>
+      <label>WiFi password <input id="pass" type="password" maxlength="64" placeholder="leave empty for an open network"></label>
+      <details>
+        <summary>More settings (optional)</summary>
+        <label>Where are you?
+          <select id="where">
+            <option value="auto">Find me automatically</option>
+            <option value="manual">I'll type my coordinates</option>
+          </select>
+        </label>
+        <div id="coords" hidden>
+          <label>Latitude <input id="lat" inputmode="decimal" placeholder="38.7223"></label>
+          <label>Longitude <input id="lon" inputmode="decimal" placeholder="-9.1393"></label>
+        </div>
+        <label>How far to look (km) <input id="radius" type="number" min="1" max="250" value="40"></label>
+        <label class="check"><input id="night" type="checkbox"> Turn the screen off at night
+          <span class="inline">from <input id="night-from" type="number" min="0" max="23" value="1"> to <input id="night-to" type="number" min="0" max="23" value="5"> h</span></label>
+      </details>
+      <button class="btn" id="send" type="submit">Connect to my board and send</button>
+    </form>
+    <p id="setup-status" role="status" aria-live="polite"></p>
+  </section>
+</main>
+
+<footer>
+  <p class="community" id="community" hidden></p>
+  <p><a id="repo-link" href="#">Source code</a> &middot; Flight data: adsb.fi, adsbdb, planespotters.net.</p>
+</footer>
+<script src="app.js"></script>
+</body>
+</html>

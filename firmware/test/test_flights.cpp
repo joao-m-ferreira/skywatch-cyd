@@ -292,6 +292,22 @@ int main() {
     CHECK(jf::configCommand(&c, "set backlight 40", r, sizeof r) == jf::CmdAction::None && c.bl_pin == 27);
     CHECK(jf::configCommand(&c, "set touch shared", r, sizeof r) == jf::CmdAction::Display && c.touch_shared);
     CHECK(jf::configCommand(&c, "set touch wireless", r, sizeof r) == jf::CmdAction::None && c.touch_shared);
+    {  // the exact lines the web portal (web/app.js) sends after flashing must be accepted as they are
+      jf::Config w;
+      jf::configDefaults(&w, "", "", 0, 0, 40, "x@example.invalid");
+      CHECK(jf::configCommand(&w, "set ssid My Home WiFi", r, sizeof r) == jf::CmdAction::Changed);
+      CHECK(strcmp(w.ssid, "My Home WiFi") == 0);                    // spaces in the name are kept
+      CHECK(jf::configCommand(&w, "set pass hunter2hunter2", r, sizeof r) == jf::CmdAction::Changed);
+      CHECK(jf::configCommand(&w, "set pass -", r, sizeof r) == jf::CmdAction::Changed && w.pass[0] == '\0');  // open network
+      CHECK(jf::configCommand(&w, "set location auto", r, sizeof r) == jf::CmdAction::Changed && w.auto_loc);
+      CHECK(jf::configCommand(&w, "set location static 38.7223 -9.1393", r, sizeof r) == jf::CmdAction::Changed && !w.auto_loc);
+      CHECK(jf::configCommand(&w, "set radius 55", r, sizeof r) == jf::CmdAction::Changed && w.radius_km == 55);
+      CHECK(jf::configCommand(&w, "set night 1 5", r, sizeof r) == jf::CmdAction::Changed && w.night_on && w.night_start == 1 && w.night_end == 5);
+      CHECK(jf::configCommand(&w, "set night off", r, sizeof r) == jf::CmdAction::Changed && !w.night_on);
+      CHECK(strncmp(r, "ok", 2) == 0);                               // the page waits for a reply starting with "ok"
+      jf::configCommand(&w, "set radius 999", r, sizeof r);
+      CHECK(strncmp(r, "error", 5) == 0);                            // ... or "error"
+    }
     jf::configCommand(&c, "set backlight 21", r, sizeof r);
     jf::configCommand(&c, "set touch separate", r, sizeof r);
     CHECK(jf::configCommand(&c, "set invert on", r, sizeof r) == jf::CmdAction::Display && c.invert);

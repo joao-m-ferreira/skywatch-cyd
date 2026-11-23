@@ -10,7 +10,9 @@
       "bootloaderOffset": 4096,
       "flashBytes": 4194304,
       "status": "verified",
-      "notes": "Tested on real hardware."
+      "notes": "Tested on real hardware.",
+      "title": "Cheap Yellow Display 2.8\"",
+      "tagline": "The popular 2.8-inch ESP32 touchscreen with a single USB port."
     },
     {
       "id": "cyd-st7789",
@@ -22,7 +24,9 @@
       "bootloaderOffset": 4096,
       "flashBytes": 4194304,
       "status": "untested",
-      "notes": "Same pinout as the CYD with the ST7789 panel and inversion preset. Not tested on hardware; if the colours look wrong, use the serial commands in the README."
+      "notes": "Same pinout as the CYD with the ST7789 panel and inversion preset. Not tested on hardware; if the colours look wrong, use the serial commands in the README.",
+      "title": "Cheap Yellow Display 2.8\", two USB ports",
+      "tagline": "The same board with a USB-C port beside the micro-USB one."
     },
     {
       "id": "cyd35",
@@ -34,7 +38,9 @@
       "bootloaderOffset": 4096,
       "flashBytes": 4194304,
       "status": "experimental",
-      "notes": "Pins are the common ones for these boards and have not been verified on hardware. Resistive touch only."
+      "notes": "Pins are the common ones for these boards and have not been verified on hardware. Resistive touch only.",
+      "title": "Big Yellow Display 3.5\"",
+      "tagline": "The larger 3.5-inch version with a wider 480 x 320 screen."
     },
     {
       "id": "amoled18",
@@ -46,7 +52,9 @@
       "bootloaderOffset": 0,
       "flashBytes": 16777216,
       "status": "simulator",
-      "notes": "Only ever run in the esp32sim emulator, never on the real board."
+      "notes": "Only ever run in the esp32sim emulator, never on the real board.",
+      "title": "Waveshare AMOLED 1.8\"",
+      "tagline": "A small, very sharp AMOLED screen on an ESP32-S3 board."
     }
   ]
 }

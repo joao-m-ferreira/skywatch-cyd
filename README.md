@@ -33,10 +33,23 @@ One **ESP32-2432S028R** (2.8" ILI9341, resistive touch, RGB LED, light sensor) a
 cable, roughly €15–25. Capacitive "IPS" variants use different touch pins and are not supported.
 
 ## Install (flash the prebuilt firmware)
-No toolchain needed: download the binary from [Releases](https://github.com/joao-m-ferreira/skywatch-cyd/releases)
-and write it to the board over USB.
+**Easiest: from your browser.** Open the web portal, choose your board, press **Install**, then type your
+WiFi name and password into the page: it sends them to the board over the USB cable. You need Chrome or Edge
+on a computer and a USB *data* cable, and nothing else. The portal is published from this repository's latest
+release (see [Web portal](#web-portal)).
 
-1. From the latest release download **`skywatch-cyd-<version>-merged.bin`** (and `SHA256SUMS` to check it:
+**Or by hand**, with the files from [Releases](https://github.com/joao-m-ferreira/skywatch-cyd/releases):
+there is one pair of files per board, named `skywatch-cyd-<version>-<board>-merged.bin` (everything, flash at
+`0x0`) and `-firmware.bin` (the app only, flash at `0x10000`, keeps your settings).
+
+| Board | `<board>` | Chip | Status |
+|---|---|---|---|
+| ESP32-2432S028R "Cheap Yellow Display" 2.8" (ILI9341, one USB port) | `cyd` | ESP32 | tested on real hardware |
+| 2.8" CYD with two USB ports (ST7789) | `cyd-st7789` | ESP32 | not tested on hardware |
+| 3.5" "big CYD" (ST7796, 480x320) | `cyd35` | ESP32 | experimental |
+| Waveshare ESP32-S3-Touch-AMOLED-1.8 | `amoled18` | ESP32-S3 | emulator only |
+
+1. Download the `-merged.bin` for your board (and `SHA256SUMS` to check it:
    `shasum -a 256 -c SHA256SUMS`).
 2. Plug the board in with a micro-USB **data** cable and find its port: macOS `/dev/cu.wchusbserial*`
    (or `/dev/cu.usbserial*`), Linux `/dev/ttyUSB0`, Windows `COM3`. If no port appears, install the
@@ -44,15 +57,14 @@ and write it to the board over USB.
 3. Flash it, either with `esptool` (`pip install esptool`):
 
    ```sh
-   # first install: one file at 0x0 (also erases saved settings)
-   esptool.py --chip esp32 --port <port> --baud 460800 write_flash 0x0 skywatch-cyd-<version>-merged.bin
+   # first install: one file at 0x0 (also erases saved settings); use --chip esp32s3 for the AMOLED board
+   esptool.py --chip esp32 --port <port> --baud 460800 write_flash 0x0 skywatch-cyd-<version>-<board>-merged.bin
    # update an installed board: the app only (keeps your WiFi and settings)
-   esptool.py --chip esp32 --port <port> --baud 460800 write_flash 0x10000 skywatch-cyd-<version>-firmware.bin
+   esptool.py --chip esp32 --port <port> --baud 460800 write_flash 0x10000 skywatch-cyd-<version>-<board>-firmware.bin
    ```
 
-   or from the browser (Chrome/Edge, nothing to install): open
-   [Espressif's web flasher](https://espressif.github.io/esptool-js/), connect, set the address to `0x0`,
-   pick the `-merged.bin` file and press Program.
+   or with Espressif's browser flasher: open [esptool-js](https://espressif.github.io/esptool-js/), connect, set
+   the address to `0x0`, pick the `-merged.bin` file and press Program.
 4. If the upload cannot connect, hold the **BOOT** button while it starts, then release it.
 5. Open a serial terminal at **115200 baud** (`screen /dev/cu.wchusbserial* 115200`, Arduino serial
    monitor, …), type `help`, and set your WiFi:
@@ -133,6 +145,20 @@ USB port or cable: try another port, or lower the LED with `set led 30`. After t
 the board starts in **safe mode** (no photos, no 3D model, text only) so it can still be reached;
 five stable minutes, or `safe off`, bring it back to normal.
 
+## Web portal
+`web/` is a small static site that flashes the firmware from the browser ([ESP Web Tools](https://github.com/esphome/esp-web-tools))
+and then sends the WiFi name, password and a few optional settings to the board over USB (Web Serial). It
+is built from the latest release by `.github/workflows/pages.yml` and published with GitHub Pages
+(*Settings, Pages, Source: GitHub Actions*; the repository has to be public). Build it locally with
+`python3 scripts/build_site.py --dist dist --out build/site`.
+
+Each board's files come from `firmware/boards.json`, which also holds its test status; the portal shows that
+status and asks for confirmation before installing a board nobody has tried on real hardware.
+
+**Forks and flashes.** Forks and stars are read live from GitHub by the page. Finished installs are counted by
+an optional tiny Cloudflare Worker (`workers/flash-counter/`, one number per board, nothing about the visitor);
+without it the page simply shows no flash count.
+
 ## Build from source
 Needs `arduino-cli`, Go (optional proxy only), and the ESP32 core.
 
@@ -153,7 +179,8 @@ firmware reports its version at boot and in `status`.
 2. Merge to `main` and wait for CI to pass.
 3. Run `scripts/tag-release.sh <version>`: it checks everything, then pushes the tag.
 4. The Release workflow builds the binaries from a clean checkout (no secrets), verifies them, and
-   publishes `skywatch-cyd-<version>-merged.bin`, `-firmware.bin` and `SHA256SUMS`.
+   publishes a `-merged.bin` and `-firmware.bin` for every board in `firmware/boards.json`, and `SHA256SUMS`.
+   The Pages workflow then rebuilds the [web portal](#web-portal) from that release.
 
 ## Data sources and credits
 - Aircraft positions: [adsb.fi](https://adsb.fi) open data (personal, non-commercial use).

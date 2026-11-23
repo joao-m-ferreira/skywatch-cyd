@@ -27,3 +27,4 @@ jobs:
       - name: release-artifact self-test
         run: |
           python3 scripts/check_artifacts.py --self-test
+          python3 scripts/build_site.py --self-test
