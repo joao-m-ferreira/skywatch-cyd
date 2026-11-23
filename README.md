@@ -7,7 +7,7 @@ type, route, altitude, speed, distance, a compass, and a shaded 3D model in the 
 
 ![3D aircraft models rendered by the firmware's own code (host-side preview)](docs/images/models.png)
 
-<sub>Twelve airlines on twelve aircraft types, rendered on the host from the same 3D code that runs on the board, so the shapes and liveries match; the real screen is 320×240 and looks smaller and blockier.</sub>
+<sub>Twelve airlines on twelve aircraft types, rendered on the host from the same 3D code that runs on the board, so the shapes and liveries match; the real screen is 320×240 and looks smaller and blockier. Regenerate with `python3 scripts/readme_image.py`.</sub>
 
 ## Features
 - **Carousel** of the nearest aircraft (default 40 km), touch to skip ahead. 20 s data refresh.
