@@ -78,11 +78,43 @@ bool hasButton() { return isOled() || isTDisplay() || isStick(); }
 int buttonPin() { return isStick() ? 37 : 0; }  // 37 is input-only and has a pull-up on the board
 // Short screens (the T-Display) show one data field at a time and rotate it every few seconds.
 uint32_t planeMs() { return static_cast<uint32_t>(cfg.plane_sec) * 1000UL; }  // carousel: how long each plane stays
-uint32_t pageMs() { return planeMs() / 3 < 1000 ? 1000 : planeMs() / 3; }       // compact screens: time per data field
 bool compactScreen() { return !isOled() && jf::layoutFor(tft.width(), tft.height(), static_cast<jf::LayoutMode>(cfg.layout)).compact; }
 uint32_t pageStart = 0;  // when the plane on screen appeared: its data fields always start with distance
 char pageCall[12] = "";
-int dataPage() { return compactScreen() ? static_cast<int>(((millis() - pageStart) / pageMs()) % 3) : 0; }
+// The route of the plane on screen as text of at most n-1 characters (city names when they fit, else airport codes);
+// false when it is not known (yet). The 160x80 screen has room for "LIS>YYZ" only.
+bool routeText(char* out, size_t n) {
+  out[0] = '\0';
+  if (flightCount == 0 || selected >= flightCount) return false;
+  const jf::Route* rt = jf::routeFor(flights[selected].callsign);
+  if (rt == nullptr || !jf::formatRoute(rt->o_city, rt->o_iata, rt->d_city, rt->d_iata, out, n)) return false;
+  return true;
+}
+size_t routeChars() { return isOled() ? 17 : jf::layoutFor(tft.width(), tft.height(), static_cast<jf::LayoutMode>(cfg.layout)).micro ? 10 : 14; }
+// Route text for the screen at hand, or false. On the micro screen the spaces around '>' are dropped to fit.
+bool screenRoute(char* out, size_t n) {
+  if (!routeText(out, n < routeChars() + 1 ? n : routeChars() + 1)) return false;
+  if (!isOled() && jf::layoutFor(tft.width(), tft.height(), static_cast<jf::LayoutMode>(cfg.layout)).micro) {
+    char* w = out;
+    for (const char* r = out; *r != '\0'; ++r) {
+      if (*r != ' ') *w++ = *r;
+    }
+    *w = '\0';
+  }
+  return out[0] != '\0';
+}
+// Pages of data on a screen that shows one thing at a time: the compact screens rotate distance, altitude, speed (and
+// the route when known); the OLED alternates the airline row with the route.
+int pageCount() {
+  if (!compactScreen() && !isOled()) return 1;
+  char t[24];
+  return (screenRoute(t, sizeof t) ? 1 : 0) + (isOled() ? 1 : 3);
+}
+uint32_t pageMs() {  // time per page: the time per plane shared out, never under a second
+  const uint32_t each = planeMs() / static_cast<uint32_t>(pageCount());
+  return each < 1000 ? 1000 : each;
+}
+int dataPage() { return pageCount() > 1 ? static_cast<int>(((millis() - pageStart) / pageMs()) % static_cast<uint32_t>(pageCount())) : 0; }
 int shownPage = 0;
 bool setupMode = false;  // the board is running its own WiFi + settings page
 void enterSetupMode(const char* why);
@@ -488,12 +520,15 @@ void drawScreen() {
   }
   if (selected >= flightCount) selected = 0;
   ledForPlane(&flights[selected]);
+  char route[24];
+  const bool haveRoute = screenRoute(route, sizeof route);
   if (isOled()) {
-    drawPlateOled(tft, flights[selected]);
+    drawPlateOled(tft, flights[selected], haveRoute && shownPage == 1 ? route : nullptr);
     return;
   }
   drawPlate(tft, flights[selected], selected, flightCount, left, right,
-            safeMode ? nullptr : jf::photoFor(flights[selected].reg), safeMode, cfg.layout, shownPage);
+            safeMode ? nullptr : jf::photoFor(flights[selected].reg), safeMode, cfg.layout, shownPage,
+            haveRoute ? route : nullptr);
 }
 
 // Light sensor: the CYD has an LDR on GPIO 34; the AMOLED board has none (fixed daytime brightness).
@@ -1054,7 +1089,13 @@ void loop() {
     // compact screens: the next data field, repainted on its own (no flicker, no 3D model redraw)
     shownPage = dataPage();
     if (selected >= flightCount) selected = 0;
-    drawPlateField(tft, flights[selected], shownPage, cfg.layout);
+    if (isOled()) {
+      drawScreen();  // the airline row and the route alternate: a cheap full redraw
+    } else {
+      char route[24];
+      const bool haveRoute = screenRoute(route, sizeof route);
+      drawPlateField(tft, flights[selected], shownPage, cfg.layout, haveRoute ? route : nullptr);
+    }
   }
   if (now - lastPoll >= kPollMs) {
     lastPoll = now;
@@ -1124,7 +1165,9 @@ void loop() {
     if (flightCount > 0 && compactScreen() && !safeMode) {  // the prefetches took time: give the plane its full time again
       pageStart = lastRotate = millis();
       shownPage = 0;
-      drawPlateField(tft, flights[selected], 0, cfg.layout);
+      char route[24];
+      const bool haveRoute = screenRoute(route, sizeof route);
+      drawPlateField(tft, flights[selected], 0, cfg.layout, haveRoute ? route : nullptr);
     }
   }
   housekeeping(now, false);

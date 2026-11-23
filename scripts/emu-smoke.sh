@@ -4,10 +4,11 @@
 # and checks the console: it must fetch aircraft over HTTPS, draw, stay within time and memory budgets and
 # never panic or reboot. No hardware needed. Needs the internet (adsb.fi and friends are reached for real).
 #
-#   scripts/emu-smoke.sh [seconds] [landscape|portrait|s3]
+#   scripts/emu-smoke.sh [seconds] [landscape|portrait|s3|tdisplay]
 #       default 60 emulated seconds (about 10 s of wall time); "portrait" builds with rotation 0 (the
 #       stacked layout on the CYD's 240x320); "s3" builds for the ESP32-S3 and runs the Waveshare
-#       ESP32-S3-Touch-AMOLED-1.8 (V2) board model. That board is TESTED IN THE SIMULATOR ONLY.
+#       ESP32-S3-Touch-AMOLED-1.8 (V2) board model. That board is TESTED IN THE SIMULATOR ONLY. "tdisplay"
+#       builds for the LilyGO TTGO T-Display (240x135, the compact layout) and runs its board model.
 #
 # Writes build/emu/run.log and build/emu/tft.png (the emulated screen, flipped upright). Real credentials are
 # never used: the firmware is built from a temp copy with a placeholder WiFi network.
@@ -65,7 +66,9 @@ if [ "$MODE" = s3 ]; then
 else
   FQBN=esp32:esp32:esp32:PartitionScheme=huge_app
 fi
-arduino-cli compile --fqbn "$FQBN" "$D/fw/jf_flight_display" \
+EXTRA=""
+[ "$MODE" = tdisplay ] && EXTRA="-DSKYWATCH_PANEL=7"
+arduino-cli compile --fqbn "$FQBN" ${EXTRA:+--build-property "compiler.cpp.extra_flags=$EXTRA"} "$D/fw/jf_flight_display" \
   --build-path "$D/out" --export-binaries >/dev/null
 F="$D/out/jf_flight_display.ino"
 
@@ -73,6 +76,8 @@ F="$D/out/jf_flight_display.ino"
 set +e
 if [ "$MODE" = s3 ]; then
   CHIPARGS=(--chip s3 --board waveshare-amoled18-v2 --flash-mb 16 --psram-mb 8 --rom "$D/roms/esp32s3_rev0_rom.elf")
+elif [ "$MODE" = tdisplay ]; then
+  CHIPARGS=(--chip esp32 --board ttgo-tdisplay --rom "$D/roms/esp32_rev300_rom.elf")
 else
   CHIPARGS=(--chip esp32 --board cyd --rom "$D/roms/esp32_rev300_rom.elf")
 fi
