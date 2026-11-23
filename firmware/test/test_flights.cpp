@@ -571,6 +571,23 @@ int main() {
     jf::Config nan_pos = g;
     nan_pos.lat = nan_pos.lon = 0.0 / 0.0;
     CHECK(jf::configSanitize(&nan_pos) == 1 && nan_pos.auto_loc);  // NaN is not a position
+    // base64 (the Basic login): the RFC 4648 vectors, bad input and a login header
+    {
+      unsigned char dec[64];
+      auto b64 = [&](const char* s) { return jf::base64Decode(s, strlen(s), dec, sizeof dec); };
+      CHECK(b64("") == 0);
+      CHECK(b64("Zg==") == 1 && dec[0] == 'f');
+      CHECK(b64("Zm8=") == 2 && memcmp(dec, "fo", 2) == 0);
+      CHECK(b64("Zm9v") == 3 && memcmp(dec, "foo", 3) == 0);
+      CHECK(b64("Zm9vYg==") == 4 && memcmp(dec, "foob", 4) == 0);
+      CHECK(b64("Zm9vYmE") == 5 && memcmp(dec, "fooba", 5) == 0);  // unpadded is accepted
+      CHECK(b64("Zm9vYmFy") == 6 && memcmp(dec, "foobar", 6) == 0);
+      CHECK(b64("Zm9v!mFy") == -1 && b64("Zm 9v") == -1);          // outside the alphabet
+      const int n = b64("c2t5d2F0Y2g6RU1VVE9LRU4=");               // "skywatch:EMUTOKEN"
+      CHECK(n == 17 && memcmp(dec, "skywatch:EMUTOKEN", 17) == 0);
+      unsigned char tiny[3];
+      CHECK(jf::base64Decode("Zm9vYmFy", 8, tiny, sizeof tiny) == -1);  // would not fit
+    }
     // CRC-32: the standard check value, and any change is noticed
     CHECK(jf::crc32("123456789", 9) == 0xCBF43926u);
     unsigned char blob[64];

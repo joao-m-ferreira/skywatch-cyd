@@ -1,13 +1,12 @@
 #include "webapi.h"
 
-#include <ESPmDNS.h>
-#include <mdns.h>
-#include <WebServer.h>
-#include <WiFi.h>
-#include <mbedtls/base64.h>
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef ESP8266
+#include <mdns.h>  // the IDF call that removes one mDNS service
+#endif
+#include "net_compat.h"
 #include "portal.h"
 #include "portal_util.h"
 
@@ -59,8 +58,8 @@ bool presentedToken(char* out, size_t n, bool allow_api_key = false) {
   }
   if (!h.startsWith("Basic ")) return false;
   unsigned char dec[160];
-  size_t len = 0;
-  if (mbedtls_base64_decode(dec, sizeof dec - 1, &len, reinterpret_cast<const unsigned char*>(h.c_str() + 6), h.length() - 6) != 0) return false;
+  const int len = jf::base64Decode(h.c_str() + 6, h.length() - 6, dec, sizeof dec - 1);
+  if (len < 0) return false;
   dec[len] = '\0';
   const char* colon = strchr(reinterpret_cast<const char*>(dec), ':');
   if (colon == nullptr) return false;
@@ -109,7 +108,11 @@ void handleDashboard() {
 
 // Builds a JSON document into a temporary buffer and sends it (503 when memory is short).
 void sendJson(size_t (*build)(const jf::McpContext&, int, char*, size_t), int limit) {
+#ifdef ESP8266
+  const size_t cap = 4096;
+#else
   const size_t cap = 6144;
+#endif
   char* buf = static_cast<char*>(malloc(cap));
   if (buf == nullptr) {
     gServer->send(503, "text/plain", "Out of memory\n");
@@ -181,11 +184,20 @@ void handleMcp() {
     gServer->send(400, "text/plain", "Empty request.\n");
     return;
   }
-  if (body.length() > 8192) {  // a JSON-RPC request here is a few hundred bytes; never parse something huge on this heap
+#ifdef ESP8266
+  constexpr size_t kMaxBody = 2048;  // a JSON-RPC request is a few hundred bytes; this chip has no room for more
+#else
+  constexpr size_t kMaxBody = 8192;
+#endif
+  if (body.length() > kMaxBody) {  // a JSON-RPC request here is a few hundred bytes; never parse something huge on this heap
     gServer->send(413, "text/plain", "Request too large.\n");
     return;
   }
+#ifdef ESP8266
+  const size_t cap = 5120;
+#else
   const size_t cap = 8192;
+#endif
   char* out = static_cast<char*>(malloc(cap));
   if (out == nullptr) {
     gServer->send(503, "text/plain", "Out of memory\n");
@@ -202,6 +214,48 @@ namespace jf {
 
 namespace {
 bool gMdnsHttp = false;
+
+#ifdef ESP8266
+// ESP8266: the LEAmDNS responder hands out service handles, can remove a service and can be closed outright (the
+// ESP32 core crashes on MDNS.end()), so every change is applied live. It needs MDNS.update() from webLoop().
+MDNSResponder::hMDNSService gHttpService = nullptr, gMcpService = nullptr;
+
+// Keeps the mDNS records in step with the settings.
+void applyAdvertising() {
+  if (!gCfg->adv_on) {
+    if (gMdnsOn) {
+      MDNS.close();
+      gMdnsOn = gMdnsHttp = gMdnsMcp = false;
+      gHttpService = gMcpService = nullptr;
+    }
+    return;
+  }
+  if (!gMdnsOn) {
+    if (!MDNS.begin("skywatch")) return;
+    gMdnsOn = true;
+  }
+  if (!gMdnsHttp) {
+    gHttpService = MDNS.addService(nullptr, "http", "tcp", 80);
+    gMdnsHttp = gHttpService != nullptr;
+  }
+  if (gMdnsMcp && (!gCfg->mcp_on || gMdnsAuth != gCfg->mcp_auth)) {  // gone, or its TXT record is stale: remove and re-add
+    MDNS.removeService(gMcpService);
+    gMcpService = nullptr;
+    gMdnsMcp = false;
+  }
+  if (gCfg->mcp_on && !gMdnsMcp) {  // DNS-SD: browse for _mcp._tcp (dns-sd -B _mcp._tcp); nothing secret in the record
+    gMcpService = MDNS.addService(nullptr, "mcp", "tcp", 80);
+    if (gMcpService != nullptr) {
+      MDNS.addServiceTxt(gMcpService, "path", "/mcp");
+      MDNS.addServiceTxt(gMcpService, "card", "/mcp/server-card");
+      MDNS.addServiceTxt(gMcpService, "auth", gCfg->mcp_auth ? "bearer" : "none");
+      MDNS.addServiceTxt(gMcpService, "version", gSnapshot().version);
+      gMdnsMcp = true;
+      gMdnsAuth = gCfg->mcp_auth;
+    }
+  }
+}
+#else
 bool gRestart = false;  // advertising was switched off: only a restart withdraws the name (see applyAdvertising)
 
 // Keeps the mDNS records in step with the settings. MDNS.end() is never called: on this core it crashes the board
@@ -236,6 +290,7 @@ void applyAdvertising() {
     gMdnsAuth = gCfg->mcp_auth;
   }
 }
+#endif
 }  // namespace
 
 // Starts the web server on port 80, registers the routes and announces it on mDNS.
@@ -247,7 +302,8 @@ void webStart(Config* cfg, McpSnapshot snapshot, void (*on_saved)()) {
   gLocked = false;
   gServer = new WebServer(80);
   static const char* kHeaders[] = {"Authorization", "Origin", "X-API-Key"};
-  gServer->collectHeaders(kHeaders, 3);
+  const size_t kHeaderCount = 3;  // (exact types, so the ESP8266's array overload is chosen over its variadic one)
+  gServer->collectHeaders(static_cast<const char**>(kHeaders), kHeaderCount);
   gServer->on("/", HTTP_GET, handleDashboard);
   gServer->on("/api/flights", HTTP_GET, handleFlights);
   gServer->on("/api/status", HTTP_GET, handleStatus);
@@ -265,7 +321,10 @@ void webStart(Config* cfg, McpSnapshot snapshot, void (*on_saved)()) {
 // Serves pending requests and keeps the mDNS records in step with the settings.
 void webLoop() {
   if (gServer == nullptr) return;
-  applyAdvertising();  // 'set mcp off' and 'set mcpauth' take effect at once; 'set advertise off' restarts the board
+  applyAdvertising();  // 'set mcp off' and 'set mcpauth' take effect at once; 'set advertise off' restarts an ESP32
+#ifdef ESP8266
+  if (gMdnsOn) MDNS.update();
+#endif
   gServer->handleClient();
 }
 
@@ -275,12 +334,22 @@ void webStop() {
   gServer->stop();
   delete gServer;
   gServer = nullptr;
+#ifdef ESP8266
+  if (gMdnsOn) MDNS.close();
+  gMdnsOn = gMdnsHttp = gMdnsMcp = false;
+  gHttpService = gMcpService = nullptr;
+#else
   if (gMdnsMcp) mdns_service_remove("_mcp", "_tcp");
   if (gMdnsHttp) mdns_service_remove("_http", "_tcp");
   gMdnsMcp = gMdnsHttp = false;  // the responder itself keeps running (MDNS.end() is not safe here)
+#endif
 }
 
+#ifdef ESP8266
+bool webWantsRestart() { return false; }  // the ESP8266 responder can be closed live
+#else
 bool webWantsRestart() { return gRestart; }
+#endif
 
 bool webActive() { return gServer != nullptr; }
 

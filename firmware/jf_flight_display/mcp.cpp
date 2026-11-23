@@ -2,12 +2,26 @@
 
 #include <ArduinoJson.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "airline.h"
 
 namespace jf {
 namespace {
+
+// A scratch buffer for the text of one tool result, held only while a request is handled (an ESP8266 cannot spare a
+// permanent 4-6 KB). It is released when mcpHandle returns, after the response has been serialised.
+#ifdef ESP8266
+constexpr size_t kToolBuffer = 4096;
+#else
+constexpr size_t kToolBuffer = 6144;
+#endif
+struct Scratch {
+  char* p = nullptr;
+  char* take(size_t n) { return p = static_cast<char*>(malloc(n)); }
+  ~Scratch() { free(p); }
+};
 
 // One plane as a JSON object: the fields an assistant needs, never the raw ADS-B record.
 void addFlight(JsonObject o, const Flight& f) {
@@ -147,6 +161,7 @@ size_t aiCatalogJson(const char* host, char* out, size_t n) {
 
 // See mcp.h: one JSON-RPC 2.0 request in, one response out (nothing for a notification).
 size_t mcpHandle(const char* body, size_t len, const McpContext& c, char* out, size_t n) {
+  Scratch scratch;  // declared here so it outlives the serialisation at the end
   JsonDocument req;
   JsonDocument res;
   res["jsonrpc"] = "2.0";
@@ -176,12 +191,14 @@ size_t mcpHandle(const char* body, size_t len, const McpContext& c, char* out, s
     addTool(tools, "get_status", "The display's status: firmware version, uptime, WiFi, last data fetch, search radius.", false);
   } else if (strcmp(method, "tools/call") == 0) {
     const char* name = req["params"]["name"] | "";
-    static char buf[6144];  // one request at a time (a single HTTP server task)
-    if (strcmp(name, "get_nearby_flights") == 0) {
+    char* const buf = scratch.take(kToolBuffer);
+    if (buf == nullptr) {
+      setError(res, -32603, "Out of memory");
+    } else if (strcmp(name, "get_nearby_flights") == 0) {
       const int limit = req["params"]["arguments"]["limit"] | 0;
       if (limit < 0 || limit > static_cast<int>(kMaxFlights)) {
         setError(res, -32602, "limit must be 1 to the number of planes shown");
-      } else if (flightsJson(c, limit, buf, sizeof buf) == 0) {
+      } else if (flightsJson(c, limit, buf, kToolBuffer) == 0) {
         setError(res, -32603, "Response too large");
       } else {
         setText(res, buf, false);
@@ -193,11 +210,11 @@ size_t mcpHandle(const char* body, size_t len, const McpContext& c, char* out, s
         McpContext one = c;
         one.flights = c.flights + c.selected;
         one.count = 1;
-        if (flightsJson(one, 1, buf, sizeof buf) == 0) setError(res, -32603, "Response too large");
+        if (flightsJson(one, 1, buf, kToolBuffer) == 0) setError(res, -32603, "Response too large");
         else setText(res, buf, false);
       }
     } else if (strcmp(name, "get_status") == 0) {
-      if (statusJson(c, buf, sizeof buf) == 0) setError(res, -32603, "Response too large");
+      if (statusJson(c, buf, kToolBuffer) == 0) setError(res, -32603, "Response too large");
       else setText(res, buf, false);
     } else {
       setError(res, -32602, "Unknown tool");

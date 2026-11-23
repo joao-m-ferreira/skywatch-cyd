@@ -41,7 +41,12 @@ bool parseInt(const char* s, int lo, int hi, int* out) {
   return true;
 }
 
-const char kHelp[] =
+#ifdef ESP8266
+#include <pgmspace.h>  // const data lives in RAM on this chip unless it is PROGMEM: 3 KB for the help text alone
+#else
+#define PROGMEM
+#endif
+const char kHelp[] PROGMEM =
     "Commands (115200 baud, end with Enter):\n"
     "  show                   current settings (password hidden)\n"
     "  status                 uptime, memory, WiFi, clock\n"
@@ -262,7 +267,12 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
   rest = trim(rest);
 
   if (strcasecmp(p, "help") == 0 || strcmp(p, "?") == 0) {
+#ifdef ESP8266
+    strncpy_P(reply, kHelp, n - 1);
+    reply[n - 1] = '\0';
+#else
     snprintf(reply, n, "%s", kHelp);
+#endif
     return CmdAction::None;
   }
   if (strcasecmp(p, "show") == 0) {

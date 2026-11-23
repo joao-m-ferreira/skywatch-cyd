@@ -200,10 +200,13 @@ separate, smaller build (`esp8266-oled`) that shares the flight parsing, the OLE
 ESP32 build (`firmware/skywatch_esp8266/`; `scripts/stage_esp8266.sh` gathers the shared files next to it, because the
 Arduino tools compile a copy of the sketch folder). It shows the same four text rows (the airline row alternates with the route as airport codes, for example `LIS > YYZ`, looked
 up once per flight on adsbdb.com) and the FLASH button shows the next plane; the serial settings (`set ssid`, `set radius`, `set plane`, `set night`...) and the browser setup in the portal
-work as on the other boards. It has **no 3D model, photos, WiFi setup page, web page or MCP server**: the chip has about
-80 KB of RAM, and the TLS connection to the data source needs a 8 KB receive buffer plus about 8 KB more (the servers
-refuse small TLS records), leaving roughly 10 KB free while it fetches. The image is one file flashed at `0x0`, so
-"install" and "update" are the same file, and the saved settings survive both. Other pins: `set i2c <sda> <scl>`.
+work as on the other boards. It has **no 3D model, photos or WiFi setup page**, but it does serve the **web page, JSON API and
+MCP server** and announces itself over mDNS like the ESP32 builds ([Network interfaces](docs/network-interfaces.md)), with smaller
+limits. The chip has about 80 KB of RAM: the TLS connection to the data source needs a 6 KB receive buffer plus about 7 KB more
+(the servers refuse small TLS records), and the web server and mDNS take their share, so roughly 24 KB are free when idle and
+10 KB while it fetches. If a board reports "Not enough memory for TLS", `set web off` and `set mcp off` give the memory back. The
+image is one file flashed at `0x0`, so "install" and "update" are the same file, and the saved settings survive both. Other pins:
+`set i2c <sda> <scl>`.
 
 ## Board variants and troubleshooting
 The "Cheap Yellow Display" is sold with the same pinout but different panels. The default matches the

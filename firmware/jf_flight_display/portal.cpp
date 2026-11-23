@@ -1,21 +1,21 @@
 #include "portal.h"
 
-#include <DNSServer.h>
-#include <WebServer.h>
-#include <WiFi.h>
 #include <string.h>
 
+#include "net_compat.h"
 #include "portal_util.h"
 
 namespace {
 jf::Config* gCfg = nullptr;
 void (*gSaved)() = nullptr;
 WebServer* gServer = nullptr;
-DNSServer* gDns = nullptr;
+#ifndef ESP8266
+DNSServer* gDns = nullptr;  // setup mode only: the ESP8266 build has no setup access point
+#endif
 bool (*gGuard)() = nullptr;  // runs before every settings request (access token check on a normal network)
 bool gSetup = false;         // true: the board's own setup WiFi, false: the board's address on your network
 
-const char kHead[] =
+const char kHead[] PROGMEM =
     "<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
     "<title>skywatch setup</title><style>"
     "body{font:16px system-ui,sans-serif;max-width:30rem;margin:0 auto;padding:16px;background:#f4ead0;color:#2c2016}"
@@ -47,7 +47,7 @@ void appendInput(String& out, const char* label, const char* name, const char* v
 
 // Serves the settings form, with an error message above it when there is one.
 void sendForm(const char* error) {
-  String h = kHead;
+  String h = FPSTR(kHead);
   h += "<h1>skywatch setup</h1><p>Choose your WiFi and where you are. The display then joins your WiFi on its own.</p>";
   if (error != nullptr && error[0] != '\0') {
     h += "<p class=err>";
@@ -175,7 +175,7 @@ void handleSave() {
   if (ok && gServer->hasArg("adv")) ok = run(&tmp, String("set advertise ") + (gServer->arg("adv") == "on" ? "on" : "off"), &why);
   if (ok && (tmp.web_on || tmp.mcp_on) && tmp.token[0] == '\0') {  // first time either is on: make the access token
     uint32_t words[4];
-    for (uint32_t& w : words) w = esp_random();
+    for (uint32_t& w : words) w = platformRandom();
     char tok[25];
     jf::randomToken(words, tok);
     ok = run(&tmp, String("set token ") + tok, &why);
@@ -185,7 +185,7 @@ void handleSave() {
     return;
   }
   *gCfg = tmp;
-  String h = kHead;
+  String h = FPSTR(kHead);
   if (gSetup) {
     h += "<h1>Saved</h1><p>The display is joining <b>";
     appendEscaped(h, gCfg->ssid);
@@ -213,10 +213,12 @@ void handleForm() {
   sendForm(nullptr);
 }
 
+#ifndef ESP8266
 void redirectToPortal() {  // phones probe a few well-known addresses; sending them here opens the page
   gServer->sendHeader("Location", String("http://") + WiFi.softAPIP().toString() + "/", true);
   gServer->send(302, "text/plain", "");
 }
+#endif  // !ESP8266
 }  // namespace
 
 namespace jf {
@@ -233,6 +235,7 @@ void settingsRegister(WebServer* server, Config* cfg, void (*on_saved)(), bool (
   if (setup_mode) server->on("/", HTTP_GET, handleForm);
 }
 
+#ifndef ESP8266
 // Starts setup mode: the access point, the captive-portal DNS and the settings page.
 void portalStart(Config* cfg, const char* ap_ssid, const char* ap_pass, void (*on_saved)()) {
   if (gServer != nullptr) portalStop();
@@ -274,5 +277,6 @@ void portalStop() {
 }
 
 bool portalActive() { return gDns != nullptr; }
+#endif  // !ESP8266
 
 }  // namespace jf

@@ -135,7 +135,7 @@
       "flashBytes": 4194304,
       "flags": "-DSKYWATCH_I2C_SDA=14 -DSKYWATCH_I2C_SCL=12",
       "status": "experimental",
-      "notes": "Tested on one ESP-12 board with an OLED on GPIO 14/12 (live fetching, location, clock and display). A single image at 0x0, so install and update are the same file; settings are kept. Text only, with no web page or MCP server; free memory is tight (about 10 KB during a fetch). Other pins: set i2c <sda> <scl>."
+      "notes": "Tested on one ESP-12 board with an OLED on GPIO 14/12 (live fetching, location, clock, routes and display). A single image at 0x0, so install and update are the same file; settings are kept. Text only. The web page, JSON API, MCP server and mDNS name run too but have not been used from another computer yet. Free memory is tight (about 24 KB idle, 10 KB while fetching): set web off / set mcp off give it back. Other pins: set i2c <sda> <scl>."
     }
   ]
 }

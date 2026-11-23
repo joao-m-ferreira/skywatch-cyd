@@ -15,9 +15,12 @@
 #include "config.h"
 #include "crc_util.h"
 #include "flights.h"
+#include "net_compat.h"
+#include "portal_util.h"
 #include "timing_util.h"
 #include "version.h"
 #include "version_util.h"
+#include "webapi.h"
 
 #ifndef SKYWATCH_I2C_SDA
 #define SKYWATCH_I2C_SDA 14
@@ -30,11 +33,11 @@ namespace {
 constexpr uint32_t kPollMs = 20000;                      // data refresh
 constexpr uint32_t kWifiRetryMs = 20000;                 // a connection attempt that has not worked by now is restarted
 // TLS receive buffer. The servers used here (Cloudflare and others) do not accept small TLS records (MFLN), so the
-// buffer must hold the largest record they send; 6 KB worked in testing for ~10 planes and 8 KB gives headroom.
-// The rest of the handshake needs about 8 KB more: with less free than that, say so instead of crashing the TLS
+// buffer must hold the largest record they send; 6 KB worked in testing for ~10 planes (8 KB leaves too little next
+// to the web server). The rest of the handshake needs about 7 KB more: with less free than that, say so instead of crashing the TLS
 // library (it writes through a null pointer when an allocation fails).
-constexpr int kTlsRx = 8192, kTlsTx = 512;
-constexpr uint32_t kTlsOverhead = 8000;
+constexpr int kTlsRx = 6144, kTlsTx = 512;
+constexpr uint32_t kTlsOverhead = 7000;
 constexpr uint32_t kStuckRestartMs = 10UL * 60UL * 1000UL;  // no good fetch for this long: restart
 
 // Bit-banged I2C: works on any two pins (the hardware I2C pins of an ESP8266 are not fixed anyway).
@@ -72,7 +75,6 @@ constexpr uint32_t kMagic = 0x534B5701u ^ static_cast<uint32_t>(sizeof(jf::Confi
 void defaults() {
   jf::configDefaults(&cfg, "", "", 38.7223, -9.1393, 40, "you@example.com");
   cfg.panel = 6;
-  cfg.web_on = cfg.mcp_on = cfg.adv_on = cfg.mcp_auth = false;  // no web page or MCP server on this board
   cfg.i2c_sda = SKYWATCH_I2C_SDA;
   cfg.i2c_scl = SKYWATCH_I2C_SCL;
 }
@@ -90,7 +92,6 @@ void loadConfig() {
   } else if (s.magic == kMagic) {
     Serial.println("warning: the stored settings are corrupt (checksum); using defaults");
   }  // else: first start, or an update that changed the layout: defaults
-  cfg.web_on = cfg.mcp_on = cfg.adv_on = cfg.mcp_auth = false;  // no web page or MCP server on this board
   const int fixed = jf::configSanitize(&cfg);
   if (fixed > 0) Serial.printf("warning: %d stored setting(s) were out of range and were reset to defaults\n", fixed);
 }
@@ -420,6 +421,48 @@ void printFlights() {
 }
 
 // Runs one serial command line: the shared parser edits the settings and says what to do next; this applies it.
+// ---------------------------------------------------------------- web page, JSON API and MCP server (webapi.cpp)
+
+// What the web page and the MCP server may see, copied per request (they never read the globals directly).
+jf::McpContext webSnapshot() {
+  jf::McpContext c;
+  c.flights = flights;
+  c.count = flightCount;
+  c.selected = selected;
+  c.version = SKYWATCH_VERSION;
+  c.uptime_s = millis() / 1000;
+  c.free_heap = ESP.getFreeHeap();
+  c.wifi = WiFi.status() == WL_CONNECTED;
+  c.rssi = WiFi.RSSI();
+  c.last_fetch_age_s = fetchedOnce ? static_cast<int>((millis() - lastGoodMs) / 1000) : -1;
+  c.radius_km = cfg.radius_km;
+  c.max_planes = cfg.max_planes;
+  c.panel = "ESP8266 OLED";
+  return c;
+}
+
+// Makes a new random access token (120 bits, no look-alike characters) and saves it.
+void makeToken() {
+  uint32_t words[4];
+  for (uint32_t& w : words) w = platformRandom();
+  jf::randomToken(words, cfg.token);
+  saveConfig();
+}
+
+// The web page and the MCP server both need a token: made the first time either is switched on.
+void ensureToken() {
+  if ((cfg.web_on || cfg.mcp_on) && cfg.token[0] == '\0') {
+    makeToken();
+    Serial.printf("access token made: %s\n(keep it private; 'token' shows it again, 'token new' replaces it)\n", cfg.token);
+  }
+}
+
+// The settings page on the board's address saved something: apply it like a serial 'set'.
+void onWebSaved() {
+  saveConfig();
+  netChanged = true;
+}
+
 void handleLine(const char* line) {
   if (strcasecmp(line, "status") == 0) {
     printStatus();
@@ -437,13 +480,10 @@ void handleLine(const char* line) {
   const jf::CmdAction action = jf::configCommand(&cfg, line, reply, 4096);
   Serial.print(reply);
   free(reply);
-  if (cfg.web_on || cfg.mcp_on || cfg.adv_on || cfg.mcp_auth) {  // accepted by the shared parser, but there is nothing to switch on
-    cfg.web_on = cfg.mcp_on = cfg.adv_on = cfg.mcp_auth = false;
-    Serial.println("note: the web page, MCP server and network announcement are not available on the ESP8266 build (they stay off)");
-  }
   switch (action) {
     case jf::CmdAction::Changed:
       saveConfig();
+      ensureToken();
       netChanged = true;  // pick the new WiFi / location / radius up
       break;
     case jf::CmdAction::Redraw:
@@ -474,9 +514,15 @@ void handleLine(const char* line) {
       checkForUpdate();
       break;
     case jf::CmdAction::Setup:
+      Serial.println("the WiFi setup page is not available on the ESP8266 build; use the serial commands or the web setup at the project's page");
+      break;
     case jf::CmdAction::Token:
+      if (cfg.token[0] != '\0') Serial.printf("access token: %s\n", cfg.token);
+      else Serial.println("no access token yet: it is made when the web page or MCP server is switched on");
+      break;
     case jf::CmdAction::NewToken:
-      Serial.println("not available on the ESP8266 build (no setup page, web page or MCP server); use the serial commands");
+      makeToken();
+      Serial.printf("new access token: %s\n(clients using the old one stop working)\n", cfg.token);
       break;
     case jf::CmdAction::None:
       break;
@@ -556,6 +602,17 @@ void loop() {
     startWifi();  // a stuck attempt: start over
   }
   if (online && !clockStarted) startClock();
+  // The optional web page / JSON API / MCP server on the board's address (webapi.cpp), announced over mDNS. Each
+  // request is answered between the loop's other work; a fetch or route lookup (a few seconds) delays it.
+  if (cfg.web_on || cfg.mcp_on) {
+    if (!jf::webActive() && online) {
+      ensureToken();
+      jf::webStart(&cfg, webSnapshot, onWebSaved);
+    }
+    jf::webLoop();
+  } else if (jf::webActive()) {
+    jf::webStop();
+  }
   if (online && cfg.auto_loc && !geoDone) {
     geoDone = true;  // one try per connection; the last known position is kept on failure
     if (flightCount == 0) message("Locating...", "from your IP address");
