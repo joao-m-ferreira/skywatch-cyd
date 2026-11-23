@@ -26,7 +26,8 @@ enum Body : uint8_t {
   kBodyFull = 2,   // primary colour all over
   kBodyPlain = 3,  // all white, no cheatline
   kBodyEasy = 4,   // easyJet: orange crown on the forward fuselage, orange rear fuselage
-  kBodyTitle = 5   // white with the airline name as a primary-colour band on the forward fuselage
+  kBodyTitle = 5,  // white with the airline name as a primary-colour band on the forward fuselage
+  kBodyMaersk = 6  // white; primary-colour lower fuselage widening to the tail; name in the secondary colour
 };
 
 enum FinBase : uint8_t { kFinPrimary = 0, kFinWhite = 1, kFinSecondary = 2 };
