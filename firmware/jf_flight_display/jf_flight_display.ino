@@ -23,7 +23,6 @@ namespace {
 constexpr uint32_t kPollMs = 20000;
 constexpr uint32_t kRotateMs = 6000;   // carousel: how long each plane stays on screen
 constexpr uint32_t kWifiTimeoutMs = 15000;
-constexpr uint32_t kWakeMs = 30000;    // a touch wakes the screen for this long at night
 constexpr uint32_t kWatchdogMs = 90000;
 constexpr uint32_t kStuckRestartMs = 10UL * 60UL * 1000UL;  // no good fetch for this long
 constexpr uint32_t kDailyRestartMs = 24UL * 60UL * 60UL * 1000UL;
@@ -51,6 +50,8 @@ bool setupScreenShown = false;
 uint32_t nightTestUntil = 0;  // "night test": force night mode until this millis() (not saved)
 int lastBacklight = -1;
 
+uint32_t wakeMs() { return static_cast<uint32_t>(cfg.wake_min) * 60000UL; }  // touch-to-wake at night
+
 // ---------------------------------------------------------------- settings in flash
 
 void loadConfig() {
@@ -66,6 +67,7 @@ void loadConfig() {
   cfg.night_on = prefs.getBool("night", cfg.night_on);
   cfg.night_start = prefs.getInt("nstart", cfg.night_start);
   cfg.night_end = prefs.getInt("nend", cfg.night_end);
+  cfg.wake_min = prefs.getInt("wake", cfg.wake_min);
   if (prefs.isKey("tz")) prefs.getString("tz", cfg.tz, sizeof cfg.tz);
   cfg.auto_loc = prefs.getBool("aloc", cfg.auto_loc);
   cfg.tz_set = prefs.getBool("tzset", cfg.tz_set);
@@ -83,6 +85,7 @@ void saveConfig() {
   prefs.putBool("night", cfg.night_on);
   prefs.putInt("nstart", cfg.night_start);
   prefs.putInt("nend", cfg.night_end);
+  prefs.putInt("wake", cfg.wake_min);
   prefs.putString("tz", cfg.tz);
   prefs.putBool("aloc", cfg.auto_loc);
   prefs.putBool("tzset", cfg.tz_set);
@@ -349,14 +352,41 @@ void printStatus() {
                 lastFetchOk ? "ok" : (lastError[0] ? lastError : "none yet"));
 }
 
+void printFlights() {
+  if (lastFetchOk == 0) {
+    Serial.println("no data yet");
+    return;
+  }
+  Serial.printf("%d aircraft within %d km of %.4f, %.4f (fetched %lu s ago)\n", flightCount,
+                cfg.radius_km, cfg.lat, cfg.lon,
+                static_cast<unsigned long>((millis() - lastFetchOk) / 1000));
+  for (int i = 0; i < flightCount; ++i) {
+    const jf::Flight& f = flights[i];
+    const jf::Airline* al = jf::airlineFor(f.callsign);
+    const jf::Route* rt = jf::routeFor(f.callsign);
+    char alt[16], route[16] = "";
+    jf::formatAltitude(f.alt_ft, alt, sizeof alt);
+    if (rt != nullptr) snprintf(route, sizeof route, "%s>%s", rt->o_iata, rt->d_iata);
+    Serial.printf("%c%d  %-8s %-5s %-8s %-9s %5d kt  trk %03d  %5.1f km %-2s  %s  %s\n",
+                  i == selected ? '>' : ' ', i + 1, f.callsign, f.type[0] ? f.type : "-",
+                  f.reg[0] ? f.reg : "-", alt, f.speed_kt, f.track, static_cast<double>(f.dist_km),
+                  jf::compass(f.bearing), al != nullptr ? al->name : "?",
+                  route);
+  }
+}
+
 void handleLine(const char* line) {
   if (strcasecmp(line, "status") == 0) {
     printStatus();
     return;
   }
+  if (strcasecmp(line, "flights") == 0) {
+    printFlights();
+    return;
+  }
   if (strcasecmp(line, "night test") == 0) {  // 20 s of night mode, never saved
     nightTestUntil = millis() + 20000;
-    Serial.println("night test: screen and LED off for 20 s (touch the screen to wake it for 30 s)");
+    Serial.println("night test: screen and LED off for 20 s (touch the screen to wake it for the 'wake' time)");
     return;
   }
   static char reply[1800];
@@ -514,7 +544,7 @@ void loop() {
     if (geoDone) lastPoll = now - kPollMs;
   }
 
-  // Night mode: screen and LED off inside the window; a touch wakes it for 30 s.
+  // Night mode: screen and LED off inside the window; a touch wakes it for cfg.wake_min minutes.
   static uint32_t lastNightCheck = 0;
   if (now - lastNightCheck >= 1000 || lastNightCheck == 0) {
     lastNightCheck = now;
@@ -536,8 +566,8 @@ void loop() {
       screenOff = true;
     }
     int32_t tx, ty;
-    if (tft.getTouch(&tx, &ty)) {  // touch: wake for 30 s with fresh data
-      wakeUntil = now + kWakeMs;
+    if (tft.getTouch(&tx, &ty)) {  // touch: wake with fresh data
+      wakeUntil = now + wakeMs();
       screenOff = false;
       updateBacklight();
       lastPoll = now - kPollMs;
@@ -564,7 +594,7 @@ void loop() {
       lastRotate = now;
       redraw = true;
     }
-    if (nightMode) wakeUntil = now + kWakeMs;  // keep the screen on while it is being used
+    if (nightMode) wakeUntil = now + wakeMs();  // keep the screen on while it is being used
     delay(300);  // debounce
   }
   if (flightCount > 1 && now - lastRotate >= kRotateMs) {  // carousel

@@ -14,6 +14,7 @@ struct Config {
   bool night_on;
   int night_start;   // hour 0..23 the screen goes off
   int night_end;     // hour 0..23 it comes back
+  int wake_min;      // minutes a touch wakes the screen during the night window
   char tz[48];       // POSIX TZ string for the clock
   bool auto_loc;     // true: work out the location from the public IP (until lat/lon are set)
   bool tz_set;       // true once the user chose a timezone (never overridden by geo-IP)

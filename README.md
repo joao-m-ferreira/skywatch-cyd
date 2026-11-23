@@ -23,7 +23,7 @@ exact; the real screen is 320×240 and looks smaller and blockier.</sub>
   with the 3D model as fallback.
 - **RGB LED** in the airline's colour; airlines with two real colours (Ryanair, TAP…) hold and fade
   between them.
-- **Night mode:** screen and LED off on a schedule, touch to wake for 30 s.
+- **Night mode:** screen and LED off on a schedule, touch to wake for 10 min (`set wake <minutes>`). `flights` over serial lists the detected aircraft.
 - **Location from your IP** (city level) or a fixed one.
 - **Robust:** WiFi watchdog, hardware watchdog, restarts if stuck, out of memory, or once a day.
 

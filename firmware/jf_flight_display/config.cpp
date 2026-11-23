@@ -41,6 +41,7 @@ const char kHelp[] =
     "Commands (115200 baud, end with Enter):\n"
     "  show                   current settings (password hidden)\n"
     "  status                 uptime, memory, WiFi, clock\n"
+    "  flights                aircraft currently detected\n"
     "  set ssid <name>        WiFi network name\n"
     "  set pass <password>    WiFi password ('-' = open network)\n"
     "  set location auto      locate from your public IP via geojs.io (default)\n"
@@ -52,6 +53,7 @@ const char kHelp[] =
     "  set tz <posix tz>      e.g. WET0WEST,M3.5.0/1,M10.5.0\n"
     "  set night <from> <to>  screen off between these hours, e.g. set night 23 7\n"
     "  set night off|on       disable / enable night mode\n"
+    "  set wake <minutes>     how long a touch wakes the screen at night, 1..120 (default 10)\n"
     "  night test             force night mode for 20 s to try it (not saved)\n"
     "  reboot                 restart the board\n"
     "  factory                forget saved settings (back to build defaults)\n";
@@ -70,6 +72,7 @@ void configDefaults(Config* c, const char* ssid, const char* pass, double lat, d
   c->night_on = true;
   c->night_start = 23;
   c->night_end = 7;
+  c->wake_min = 10;
   copy(c->tz, sizeof c->tz, kDefaultTz);
   c->auto_loc = true;
   c->tz_set = false;
@@ -144,11 +147,11 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
   if (strcasecmp(p, "show") == 0) {
     snprintf(reply, n,
              "ssid     %s\npass     %s\nlocation %s\nlat      %.5f\nlon      %.5f\nradius   %d km\n"
-             "contact  %s\nnight    %s (%02d:00 - %02d:00)\ntz       %s\n",
+             "contact  %s\nnight    %s (%02d:00 - %02d:00)\nwake     %d min (touch at night)\ntz       %s\n",
              c->ssid[0] ? c->ssid : "(not set)", c->pass[0] ? "****" : "(empty)",
              c->auto_loc ? "auto (geojs.io, from your public IP)" : "static", c->lat, c->lon,
              c->radius_km, c->contact, c->night_on ? "on" : "off", c->night_start, c->night_end,
-             c->tz);
+             c->wake_min, c->tz);
     return CmdAction::None;
   }
   if (strcasecmp(p, "reboot") == 0) {
@@ -261,6 +264,12 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
       c->night_start = a;
       c->night_end = b;
     }
+  } else if (strcasecmp(key, "wake") == 0) {
+    if (!parseInt(value, 1, 120, &a)) {
+      snprintf(reply, n, "error: wake must be a whole number of minutes from 1 to 120\n");
+      return CmdAction::None;
+    }
+    c->wake_min = a;
   } else {
     snprintf(reply, n, "unknown setting '%s' (type help)\n", key);
     return CmdAction::None;

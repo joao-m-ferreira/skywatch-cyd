@@ -268,6 +268,10 @@ int main() {
     CHECK(!c.night_on && !jf::isNightHour(c, 2));
     jf::configCommand(&c, "set night on", r, sizeof r);
     CHECK(c.night_on);
+    CHECK(c.wake_min == 10);
+    CHECK(jf::configCommand(&c, "set wake 15", r, sizeof r) == jf::CmdAction::Changed && c.wake_min == 15);
+    CHECK(jf::configCommand(&c, "set wake 0", r, sizeof r) == jf::CmdAction::None && c.wake_min == 15);
+    CHECK(jf::configCommand(&c, "set wake 121", r, sizeof r) == jf::CmdAction::None);
     CHECK(jf::configCommand(&c, "set tz CET-1CEST,M3.5.0,M10.5.0/3", r, sizeof r) == jf::CmdAction::Changed && c.tz_set);
     CHECK(jf::configCommand(&c, "set colour red", r, sizeof r) == jf::CmdAction::None);
     CHECK(strstr(r, "unknown setting") != nullptr);
