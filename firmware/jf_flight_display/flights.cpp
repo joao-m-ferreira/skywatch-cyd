@@ -175,9 +175,11 @@ void formatOledText(const Flight& f, const char* airline_name, bool looks_like_a
   else snprintf(out->airline, sizeof out->airline, "Private / other");
   char alt[16], dist[16];
   formatAltitude(f.alt_ft, alt, sizeof alt);
-  snprintf(out->alt_speed, sizeof out->alt_speed, "%s  %d kt", alt, f.speed_kt);
+  const int spd = f.speed_kt < 0 ? 0 : (f.speed_kt > 9999 ? 9999 : f.speed_kt);  // bounded so every line provably fits
+  snprintf(out->alt_speed, sizeof out->alt_speed, "%.8s  %d kt", alt, spd);
   formatDistance(f.dist_km, dist, sizeof dist);
-  snprintf(out->dist_dir, sizeof out->dist_dir, "%s %s  %s%03d", dist, compass(f.bearing), compass(f.track), f.track);
+  const int trk = ((f.track % 360) + 360) % 360;
+  snprintf(out->dist_dir, sizeof out->dist_dir, "%.7s %.2s  %.2s%03d", dist, compass(f.bearing), compass(f.track), trk);
 }
 
 }  // namespace jf
