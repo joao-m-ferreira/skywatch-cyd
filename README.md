@@ -128,7 +128,7 @@ Settings are saved in the board's flash. The build-time defaults come from `secr
 ## The 0.96" OLED version
 The same firmware also runs on a tiny **128x64 monochrome OLED** (SSD1306, I2C). It shows the same facts as
 text, with no 3D model, photo, compass, LED or touch: callsign and type, the airline, altitude and speed,
-and the distance with the bearing and the plane's heading. The planes rotate by themselves; the board's
+and the distance with the bearing and the plane's heading. When the route is known it alternates with the airline row. The planes rotate by themselves; the board's
 **BOOT** button shows the next one. The wiring is `VCC`, `GND`, `SDA` (GPIO 21) and `SCL` (GPIO 22); for
 other pins use `set i2c <sda> <scl>`, and `set panel ssd1306` selects the display on a board flashed with
 another build. Not tested on hardware.
@@ -186,7 +186,7 @@ by host tests, not yet on a real board.
 ## Small colour screens
 The **TTGO T-Display** (`set panel tdisplay`, 240x135) and the **M5StickC** (`set panel m5stickc`, 160x80) have
 no room for the full plate, so they show the 3D plane (or photo), the compass and heading, the callsign and type,
-and **one value at a time**, rotating through distance, altitude and speed; each plane starts at distance. The time
+and **one value at a time**, rotating through distance, altitude, speed and, when it is known, the **route** (origin to destination; airport codes on the 160x80 screen); each plane starts at distance. The time
 per plane (`set plane`) is split between the three. Neither board has a touch screen: the button (T-Display: left
 button, GPIO 0; M5StickC: button A, GPIO 37) shows the next plane. The M5StickC's screen is powered through its
 AXP192 chip, which the firmware sets up; the C Plus and Plus2 have other screens and are not supported yet.

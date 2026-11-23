@@ -13,10 +13,11 @@ void drawPlate(lgfx::LovyanGFX& gfx, const jf::Flight& f, int index, int count,
                const char* header_left, const char* header_right, const jf::Photo* photo,
                bool lite = false,  // lite: no photo, no 3D model (safe mode)
                int layout_mode = 0,  // jf::LayoutMode: 0 auto, 1 side, 2 side-flipped, 3 stacked
-               int page = 0);  // compact (short) screens show one of altitude / speed / distance: page % 3: 0 distance, 1 altitude, 2 speed
+               int page = 0,  // compact (short) screens show one field at a time: 0 distance, 1 altitude, 2 speed, 3 route
+               const char* route = nullptr);  // the route text for page 3 (nullptr when unknown: three pages)
 // Compact screens only: repaints just the rotating data field (no clear, no 3D model, no photo).
 // Returns false, drawing nothing, on a layout that has no such field.
-bool drawPlateField(lgfx::LovyanGFX& gfx, const jf::Flight& f, int page, int layout_mode = 0);
+bool drawPlateField(lgfx::LovyanGFX& gfx, const jf::Flight& f, int page, int layout_mode = 0, const char* route = nullptr);
 // Message plate when there is nothing to show (error=true draws it in red).
 void drawPlateMessage(lgfx::LovyanGFX& gfx, const char* msg, const char* detail,
                       const char* header_left, const char* header_right, bool error, int layout_mode = 0);
@@ -28,5 +29,6 @@ void drawSetupScreen(lgfx::LovyanGFX& gfx, const char* ap, const char* pass, con
 void drawSetupOled(lgfx::LovyanGFX& gfx, const char* ap, const char* pass, const char* url, const char* detail);
 
 // Text-only screens for a 128x64 monochrome OLED (no 3D model, no photo, no compass).
-void drawPlateOled(lgfx::LovyanGFX& gfx, const jf::Flight& f);
+// `route`, when given, takes the place of the airline row (the caller alternates them).
+void drawPlateOled(lgfx::LovyanGFX& gfx, const jf::Flight& f, const char* route = nullptr);
 void drawOledMessage(lgfx::LovyanGFX& gfx, const char* msg, const char* detail);

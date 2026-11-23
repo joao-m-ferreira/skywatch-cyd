@@ -116,9 +116,10 @@ void drawCompass(lgfx::LovyanGFX& g, const Colors& c, const jf::Layout& L, int c
 
 // The compact plate's rotating field (altitude / speed / distance). Text is drawn with the paper as its
 // background and a fixed padding, so a page change repaints just this area without clearing it first.
-void compactField(lgfx::LovyanGFX& g, const Colors& c, const jf::Layout& L, const jf::Flight& f, int page) {
+void compactField(lgfx::LovyanGFX& g, const Colors& c, const jf::Layout& L, const jf::Flight& f, int page, const char* route) {
   char buf[24], d[16];
-  const int p = ((page % 3) + 3) % 3;
+  const int pages = (route != nullptr && route[0] != '\0') ? 4 : 3;
+  const int p = ((page % pages) + pages) % pages;
   const char* label = "DISTANCE";  // order: distance, altitude, speed
   if (p == 0) {
     jf::formatDistance(f.dist_km, d, sizeof d);
@@ -126,9 +127,12 @@ void compactField(lgfx::LovyanGFX& g, const Colors& c, const jf::Layout& L, cons
   } else if (p == 1) {
     label = "ALTITUDE";
     jf::formatAltitude(f.alt_ft, buf, sizeof buf);
-  } else {
+  } else if (p == 2) {
     label = "SPEED";
     snprintf(buf, sizeof buf, "%d kt", f.speed_kt);
+  } else {
+    label = "ROUTE";
+    snprintf(buf, sizeof buf, "%s", route);
   }
   // Clear the whole field first (inside the ruled border), so no trace of the previous value is left.
   g.fillRect(L.data.x, L.data.y, L.rule_w + 1, L.info.y + L.info.h - 2 - L.data.y, c.paper);
@@ -163,7 +167,7 @@ void field(lgfx::LovyanGFX& g, const Colors& c, const jf::Layout& L, jf::Pt at, 
 
 void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
                const char* header_left, const char* header_right, const jf::Photo* photo, bool lite,
-               int layout_mode, int page) {
+               int layout_mode, int page, const char* route) {
   const Colors c = colors(g);
   const jf::Layout L = jf::layoutFor(g.width(), g.height(), static_cast<jf::LayoutMode>(layout_mode));
   g.startWrite();
@@ -307,7 +311,7 @@ void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
 
   char buf[24], d[16];
   if (L.compact) {  // one field at a time, large; the caller rotates `page`
-    compactField(g, c, L, f, page);
+    compactField(g, c, L, f, page, route);
   } else {
     jf::formatAltitude(f.alt_ft, buf, sizeof buf);
     field(g, c, L, L.altitude, "ALTITUDE", buf);
@@ -321,11 +325,11 @@ void drawPlate(lgfx::LovyanGFX& g, const jf::Flight& f, int index, int count,
   g.endWrite();
 }
 
-bool drawPlateField(lgfx::LovyanGFX& g, const jf::Flight& f, int page, int layout_mode) {
+bool drawPlateField(lgfx::LovyanGFX& g, const jf::Flight& f, int page, int layout_mode, const char* route) {
   const jf::Layout L = jf::layoutFor(g.width(), g.height(), static_cast<jf::LayoutMode>(layout_mode));
   if (!L.compact) return false;
   g.startWrite();
-  compactField(g, colors(g), L, f, page);
+  compactField(g, colors(g), L, f, page, route);
   g.endWrite();
   return true;
 }
@@ -436,7 +440,7 @@ void drawSetupScreen(lgfx::LovyanGFX& g, const char* ap, const char* pass, const
 }
 
 // ---- 128x64 monochrome OLED: four text rows, the same data as the colour plate ----
-void drawPlateOled(lgfx::LovyanGFX& g, const jf::Flight& f) {
+void drawPlateOled(lgfx::LovyanGFX& g, const jf::Flight& f, const char* route) {
   const jf::Airline* al = jf::airlineFor(f.callsign);
   jf::OledText t;
   jf::formatOledText(f, al != nullptr ? al->name : nullptr, jf::looksLikeAirlineCallsign(f.callsign), &t);
@@ -451,7 +455,7 @@ void drawPlateOled(lgfx::LovyanGFX& g, const jf::Flight& f) {
   g.setTextDatum(lgfx::top_right);
   g.drawString(t.type, g.width() - 1, 0);
   g.setTextDatum(lgfx::top_left);
-  g.drawString(t.airline, 0, 16);
+  g.drawString(route != nullptr && route[0] != '\0' ? route : t.airline, 0, 16);
   g.drawString(t.alt_speed, 0, 32);
   g.drawString(t.dist_dir, 0, 48);
   g.endWrite();
