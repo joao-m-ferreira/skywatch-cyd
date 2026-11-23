@@ -7,7 +7,6 @@
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
-#include <ESP8266mDNS.h>
 using WebServer = ESP8266WebServer;  // same calls, different class name
 // A 32-bit random number from the chip's hardware generator.
 inline uint32_t platformRandom() { return ESP.random(); }

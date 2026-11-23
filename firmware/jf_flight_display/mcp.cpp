@@ -13,7 +13,7 @@ namespace {
 // A scratch buffer for the text of one tool result, held only while a request is handled (an ESP8266 cannot spare a
 // permanent 4-6 KB). It is released when mcpHandle returns, after the response has been serialised.
 #ifdef ESP8266
-constexpr size_t kToolBuffer = 4096;
+constexpr size_t kToolBuffer = 2560;  // about 8 planes
 #else
 constexpr size_t kToolBuffer = 6144;
 #endif
@@ -195,7 +195,11 @@ size_t mcpHandle(const char* body, size_t len, const McpContext& c, char* out, s
     if (buf == nullptr) {
       setError(res, -32603, "Out of memory");
     } else if (strcmp(name, "get_nearby_flights") == 0) {
+#ifdef ESP8266
+      const int limit = req["params"]["arguments"]["limit"] | 5;  // this chip's buffer holds about 8; five unless asked
+#else
       const int limit = req["params"]["arguments"]["limit"] | 0;
+#endif
       if (limit < 0 || limit > static_cast<int>(kMaxFlights)) {
         setError(res, -32602, "limit must be 1 to the number of planes shown");
       } else if (flightsJson(c, limit, buf, kToolBuffer) == 0) {

@@ -62,6 +62,9 @@ bool shownRoutePage = false;
 uint32_t lastFetchMs = 0, lastGoodMs = 0, lastRotateMs = 0, lastDrawMs = 0, wifiStartMs = 0, wakeUntilMs = 0;
 bool fetchedOnce = false, fetchFailed = false, geoDone = false, clockStarted = false, screenOff = false, netChanged = true;
 char lastError[48] = "";
+bool memoryShort = false;  // the last fetch was refused for lack of memory (recovery below)
+uint8_t memoryFailures = 0;  // in a row; a board stuck short of memory restarts to defragment the heap
+uint32_t webHoldUntilMs = 0;  // the web server stays off until then so a fetch can have the heap
 
 // ---------------------------------------------------------------- settings in flash (EEPROM emulation)
 struct Stored {
@@ -75,6 +78,9 @@ constexpr uint32_t kMagic = 0x534B5701u ^ static_cast<uint32_t>(sizeof(jf::Confi
 void defaults() {
   jf::configDefaults(&cfg, "", "", 38.7223, -9.1393, 40, "you@example.com");
   cfg.panel = 6;
+  // The web page, MCP server and mDNS announcement are opt-in here: with all three on a fetch has only ~14 KB of
+  // contiguous heap (the mDNS responder alone takes ~4.7 KB), which is too little whenever memory is fragmented.
+  cfg.web_on = cfg.mcp_on = cfg.adv_on = false;
   cfg.i2c_sda = SKYWATCH_I2C_SDA;
   cfg.i2c_scl = SKYWATCH_I2C_SCL;
 }
@@ -227,6 +233,11 @@ class WaitingStream : public Stream {
 // aircraft list is about 1 KB per plane and has no Content-Length; collecting it in a String needs a block that
 // this heap cannot always give (growth failed silently and dropped chunks), while the filtered document is small.
 bool httpsJson(const char* host, const char* url, JsonDocument& filter, JsonDocument& doc) {
+  // With the web server and mDNS up, memory can be short: close them for this fetch (nothing is served while it runs
+  // anyway) and let the main loop start them again afterwards.
+  if (jf::webActive() && (ESP.getFreeHeap() < kTlsRx + kTlsTx + kTlsOverhead + 3000 || ESP.getMaxFreeBlockSize() < kTlsRx + 5000)) {
+    jf::webStop();
+  }
   BearSSL::WiFiClientSecure client;
   client.setInsecure();  // public read-only data, nothing private is sent
   // TLS wants a 16 KB receive buffer unless the server agrees to small records (MFLN). If it does not, and there is
@@ -235,6 +246,7 @@ bool httpsJson(const char* host, const char* url, JsonDocument& filter, JsonDocu
     client.setBufferSizes(1024, 1024);  // a server that allows small records: nearly free
   } else if (ESP.getFreeHeap() < kTlsRx + kTlsTx + kTlsOverhead || ESP.getMaxFreeBlockSize() < kTlsRx + 2000) {
     snprintf(lastError, sizeof lastError, "Not enough memory for TLS");
+    memoryShort = true;
     return false;
   } else {
     client.setBufferSizes(kTlsRx, kTlsTx);
@@ -288,9 +300,31 @@ bool fetchOnce() {
 
 // The aircraft list, with one retry (a connection can drop mid-body).
 bool fetchFlights() {
-  if (fetchOnce()) return true;
-  delay(500);
-  return fetchOnce();  // a connection can drop mid-body: one retry fixes it
+  memoryShort = false;
+  if (fetchOnce()) {
+    memoryFailures = 0;
+    return true;
+  }
+  if (memoryShort) {
+    // Not a network problem: free what can be freed (the web server and its buffers) and try again at once.
+    if (jf::webActive()) jf::webStop();
+    webHoldUntilMs = millis() + 60000;  // keep it off for a minute so the next fetches are not starved
+    yield();
+    delay(200);
+    memoryShort = false;
+  } else {
+    delay(500);  // a connection can drop mid-body: one retry fixes it
+  }
+  if (fetchOnce()) {
+    memoryFailures = 0;
+    return true;
+  }
+  if (memoryShort && ++memoryFailures >= 4) {
+    Serial.println("memory stayed short for 4 fetches; restarting to defragment the heap");
+    delay(100);
+    ESP.restart();
+  }
+  return false;
 }
 
 // Looks up where a flight is going (adsbdb.com, by callsign) and remembers the answer, also when there is none. Only the
@@ -489,6 +523,7 @@ void handleLine(const char* line) {
     case jf::CmdAction::Redraw:
       saveConfig();
       lastDrawMs = 0;
+      jf::webLogAddress();  // prints the server's address when 'debug' has just been switched on
       break;
     case jf::CmdAction::Display:  // pins or panel: only applies at start-up
       saveConfig();
@@ -605,7 +640,7 @@ void loop() {
   // The optional web page / JSON API / MCP server on the board's address (webapi.cpp), announced over mDNS. Each
   // request is answered between the loop's other work; a fetch or route lookup (a few seconds) delays it.
   if (cfg.web_on || cfg.mcp_on) {
-    if (!jf::webActive() && online) {
+    if (!jf::webActive() && online && jf::olderThan(now, webHoldUntilMs, 0) && ESP.getMaxFreeBlockSize() > 16000) {
       ensureToken();
       jf::webStart(&cfg, webSnapshot, onWebSaved);
     }
@@ -646,6 +681,7 @@ void loop() {
     lastFetchMs = now;
     if (flightCount == 0) message("Fetching...", "nearby aircraft");  // the plane on screen stays while it refreshes
     fetchFailed = !fetchFlights();
+    if (fetchFailed && memoryShort) lastFetchMs = now - kPollMs + 8000;  // not a network fault: try again in 8 s, not 20
     if (fetchFailed) Serial.printf("fetch failed (%s); keeping last data\n", lastError);
     else Serial.printf("fetched %d aircraft\n", flightCount);
     redraw = true;

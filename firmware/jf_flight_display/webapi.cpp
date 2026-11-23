@@ -91,7 +91,18 @@ bool authorised(bool basic_challenge, bool allow_api_key = false) {
   return false;
 }
 
-// Guards the web page routes: 404 when the web page is off, otherwise the access token is required.
+// Guards the read-only routes (the plane list and /api/*): 404 when the web page is off; the login is required unless
+// `set webauth off` opened them. The settings routes use pageGuard() below and are never open.
+bool viewGuard() {
+  if (!gCfg->web_on) {
+    gServer->send(404, "text/plain", "Not found\n");
+    return false;
+  }
+  return gCfg->web_open ? true : authorised(true);
+}
+
+// Guards the settings routes: 404 when the web page is off, otherwise the access token is always required (whoever
+// reaches the settings can change the WiFi and the token itself).
 bool pageGuard() {
   if (!gCfg->web_on) {
     gServer->send(404, "text/plain", "Not found\n");
@@ -102,14 +113,14 @@ bool pageGuard() {
 
 // GET /: the planes page, a small page that polls /api/flights.
 void handleDashboard() {
-  if (!pageGuard()) return;
+  if (!viewGuard()) return;
   gServer->send_P(200, "text/html", kDashboard);
 }
 
 // Builds a JSON document into a temporary buffer and sends it (503 when memory is short).
 void sendJson(size_t (*build)(const jf::McpContext&, int, char*, size_t), int limit) {
 #ifdef ESP8266
-  const size_t cap = 4096;
+  const size_t cap = 3072;  // about 8 planes
 #else
   const size_t cap = 6144;
 #endif
@@ -128,13 +139,17 @@ size_t statusAdapter(const jf::McpContext& c, int, char* out, size_t n) { return
 
 // GET /api/flights: the planes as JSON.
 void handleFlights() {
-  if (!pageGuard()) return;
+  if (!viewGuard()) return;
+#ifdef ESP8266
+  sendJson(jf::flightsJson, 8);  // as many planes as fit the buffer
+#else
   sendJson(jf::flightsJson, 0);
+#endif
 }
 
 // GET /api/status: the board's status as JSON (nothing secret in it).
 void handleStatus() {
-  if (!pageGuard()) return;
+  if (!viewGuard()) return;
   sendJson(statusAdapter, 0);
 }
 
@@ -194,7 +209,7 @@ void handleMcp() {
     return;
   }
 #ifdef ESP8266
-  const size_t cap = 5120;
+  const size_t cap = 3072;
 #else
   const size_t cap = 8192;
 #endif
@@ -216,45 +231,10 @@ namespace {
 bool gMdnsHttp = false;
 
 #ifdef ESP8266
-// ESP8266: the LEAmDNS responder hands out service handles, can remove a service and can be closed outright (the
-// ESP32 core crashes on MDNS.end()), so every change is applied live. It needs MDNS.update() from webLoop().
-MDNSResponder::hMDNSService gHttpService = nullptr, gMcpService = nullptr;
-
-// Keeps the mDNS records in step with the settings.
-void applyAdvertising() {
-  if (!gCfg->adv_on) {
-    if (gMdnsOn) {
-      MDNS.close();
-      gMdnsOn = gMdnsHttp = gMdnsMcp = false;
-      gHttpService = gMcpService = nullptr;
-    }
-    return;
-  }
-  if (!gMdnsOn) {
-    if (!MDNS.begin("skywatch")) return;
-    gMdnsOn = true;
-  }
-  if (!gMdnsHttp) {
-    gHttpService = MDNS.addService(nullptr, "http", "tcp", 80);
-    gMdnsHttp = gHttpService != nullptr;
-  }
-  if (gMdnsMcp && (!gCfg->mcp_on || gMdnsAuth != gCfg->mcp_auth)) {  // gone, or its TXT record is stale: remove and re-add
-    MDNS.removeService(gMcpService);
-    gMcpService = nullptr;
-    gMdnsMcp = false;
-  }
-  if (gCfg->mcp_on && !gMdnsMcp) {  // DNS-SD: browse for _mcp._tcp (dns-sd -B _mcp._tcp); nothing secret in the record
-    gMcpService = MDNS.addService(nullptr, "mcp", "tcp", 80);
-    if (gMcpService != nullptr) {
-      MDNS.addServiceTxt(gMcpService, "path", "/mcp");
-      MDNS.addServiceTxt(gMcpService, "card", "/mcp/server-card");
-      MDNS.addServiceTxt(gMcpService, "auth", gCfg->mcp_auth ? "bearer" : "none");
-      MDNS.addServiceTxt(gMcpService, "version", gSnapshot().version);
-      gMdnsMcp = true;
-      gMdnsAuth = gCfg->mcp_auth;
-    }
-  }
-}
+// No mDNS on the ESP8266 build: its responder takes about 4.7 KB of the ~26 KB that are free, which the HTTPS fetch needs
+// (with it the fetch ran out of memory and the board crashed). The board is reached by its IP address, which the serial
+// console prints when the server starts and `status` shows.
+void applyAdvertising() {}
 #else
 bool gRestart = false;  // advertising was switched off: only a restart withdraws the name (see applyAdvertising)
 
@@ -314,17 +294,23 @@ void webStart(Config* cfg, McpSnapshot snapshot, void (*on_saved)()) {
   gServer->onNotFound([] { gServer->send(404, "text/plain", "Not found\n"); });
   gServer->begin();
   applyAdvertising();
-  Serial.printf("web: http://%s/ (also http://skywatch.local/)%s%s\n", WiFi.localIP().toString().c_str(),
-                cfg->web_on ? " web page on" : "", cfg->mcp_on ? ", MCP at /mcp" : "");
+  webLogAddress();  // only with 'set debug on'
 }
 
 // Serves pending requests and keeps the mDNS records in step with the settings.
+void webLogAddress() {
+  if (gServer == nullptr || !gCfg->debug_log) return;
+#ifdef ESP8266
+  Serial.printf("web: http://%s/%s%s\n", WiFi.localIP().toString().c_str(),
+#else
+  Serial.printf("web: http://%s/ (also http://skywatch.local/)%s%s\n", WiFi.localIP().toString().c_str(),
+#endif
+                gCfg->web_on ? " web page on" : "", gCfg->mcp_on ? ", MCP at /mcp" : "");
+}
+
 void webLoop() {
   if (gServer == nullptr) return;
   applyAdvertising();  // 'set mcp off' and 'set mcpauth' take effect at once; 'set advertise off' restarts an ESP32
-#ifdef ESP8266
-  if (gMdnsOn) MDNS.update();
-#endif
   gServer->handleClient();
 }
 
@@ -334,11 +320,7 @@ void webStop() {
   gServer->stop();
   delete gServer;
   gServer = nullptr;
-#ifdef ESP8266
-  if (gMdnsOn) MDNS.close();
-  gMdnsOn = gMdnsHttp = gMdnsMcp = false;
-  gHttpService = gMcpService = nullptr;
-#else
+#ifndef ESP8266
   if (gMdnsMcp) mdns_service_remove("_mcp", "_tcp");
   if (gMdnsHttp) mdns_service_remove("_http", "_tcp");
   gMdnsMcp = gMdnsHttp = false;  // the responder itself keeps running (MDNS.end() is not safe here)

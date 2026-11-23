@@ -7,8 +7,8 @@ not been used from another computer yet (the ESP8266 starts the server, announce
 
 | Interface | Address | Needs | Switch (default) |
 |---|---|---|---|
-| [Web page](#web-interface) | `http://skywatch.local/` | access token (login `skywatch`) | `set web on\|off` (on) |
-| [JSON API](#json-api) | `/api/flights`, `/api/status` | access token | follows the web page |
+| [Web page](#web-interface) | `http://skywatch.local/` | nothing for the plane list; the token (login `skywatch`) for settings | `set web on\|off` (on), `set webauth on\|off` (off) |
+| [JSON API](#json-api) | `/api/flights`, `/api/status` | nothing, or the token with `set webauth on` | follows the web page |
 | [MCP server](#mcp-server) | `POST /mcp` | token only if header authentication is on | `set mcp on\|off` (on), `set mcpauth on\|off` (off) |
 | [Discovery](#discovery) | mDNS `skywatch.local`, `_mcp._tcp`; `/mcp/server-card`; `/.well-known/ai-catalog.json` | nothing (public, no secrets) | `set advertise on\|off` (on) |
 | [Setup access point](#setup-access-point) | `http://192.168.4.1/` on the WiFi `skywatch-XXXX` | the one-time password on the screen | opens by itself or `setup` |
@@ -224,6 +224,8 @@ connected. The web page, API and MCP are not served while it is open.
 | Command | What |
 |---|---|
 | `set web on\|off` | web page and JSON API |
+| `set webauth on\|off` | login for the plane list and `/api/*` (default off: open on your network). The settings page and saving always need the token |
+| `set debug on\|off` | print optional diagnostics, such as the web address at start-up (default off) |
 | `set mcp on\|off` | MCP endpoint |
 | `set mcpauth on\|off` | require the token in a header for `/mcp` (default off) |
 | `set advertise on\|off` | mDNS name, `_mcp._tcp`, Server Card, AI Catalog (restarts once when turned off) |
@@ -237,10 +239,13 @@ The same code serves the ESP8266 build (`esp8266-oled`), within an 80 KB RAM bud
 - Request bodies over **2 KB** are refused (`413`; the ESP32 allows 8 KB), and a tool result that would not fit a 4 KB buffer answers
   `-32603 Response too large`: lower `set max`.
 - **No setup access point**: set the WiFi over USB serial or with the portal's browser setup form.
-- mDNS changes apply live (no restart for `set advertise off`).
+- **No mDNS** (the responder alone takes about 4.7 KB): reach the board by its IP address. `set advertise` has no effect here.
+- **Web page and MCP are off by default** (`set web on`, `set mcp on`) so a fresh board keeps the memory it needs to fetch.
 - While the board fetches planes or looks up a route (a few seconds) it does not answer requests; a client simply waits.
 - Memory is tight: about 24 KB free when idle and 10 KB while fetching. A fetch that finds too little says "Not enough memory for TLS"
-  instead of crashing; `set web off` and `set mcp off` give the memory back.
+  instead of crashing. It then recovers by itself: the web server is stopped for a minute, the fetch is retried at once and again after
+  8 seconds, and a board that stays short of memory for 4 fetches in a row restarts to defragment the heap. `set web off` and
+  `set mcp off` give the memory back for good.
 
 ## Troubleshooting
 | Symptom | Try |

@@ -47,23 +47,27 @@ F="$D/out/jf_flight_display.ino"
 cat > "$D/actions.txt" <<EOF
 25 uart0 set token $TOKEN
 26 uart0 set web on
+26.5 uart0 set debug on
 27 uart0 set mcp on
+450 uart0 set webauth on
 500 uart0 set mcpauth on
 EOF
 
 # Defaults are all on, so 'set web on' and 'set mcp on' above change nothing: they check the commands. The switches
 # are turned off one at a time later, by actions at fixed emulated times (the emulator runs far faster than real time).
 cat >> "$D/actions.txt" <<EOF
-900 uart0 set advertise off
-1100 uart0 set web off
-1300 uart0 set mcp off
+1500 uart0 set webauth off
+1700 uart0 set webauth on
+2100 uart0 set advertise off
+2300 uart0 set web off
+2500 uart0 set mcp off
 EOF
 
 # 3. Run the emulator in the background, with the board's port 80 published on the host.
 "$SIM" --chip esp32 --board cyd --rom "$ROM" --boot rom --console uart0 \
   --bootloader "$F.bootloader.bin" --ptable "$F.partitions.bin" --app "$F.bin" --elf "$F.elf" \
   --wifi ssid=emu-ap,psk=emu-password --hostfwd "tcp:127.0.0.1:$PORT-:80" \
-  --script "$D/actions.txt" --max-seconds 5000 --no-dump > "$D/run.log" 2>&1 &
+  --script "$D/actions.txt" --max-seconds 6000 --no-dump > "$D/run.log" 2>&1 &
 SIMPID=$!
 trap 'kill $SIMPID 2>/dev/null || true' EXIT
 
@@ -72,7 +76,7 @@ echo "waiting for the board's web server (the emulator boots, joins WiFi, takes 
 up=0
 for _ in $(seq 1 240); do
   code=$(curl -s -o /dev/null -m 4 -w '%{http_code}' "$URL/" || true)
-  [ "$code" = "401" ] && { up=1; break; }
+  { [ "$code" = "200" ] || [ "$code" = "401" ]; } && { up=1; break; }  # open by default; 401 with the login on
   kill -0 $SIMPID 2>/dev/null || { echo "FAIL: the emulator stopped (see $D/run.log)" >&2; exit 1; }
   sleep 2
 done
@@ -94,6 +98,8 @@ mcp_gone() { c="$(rpc_code)"; [ "$c" = 404 ] || [ "$c" = 000 ]; }  # 404, or the
 card_gone() { [ "$(code "$URL/mcp/server-card")" = 404 ] && [ "$(code "$URL/.well-known/ai-catalog.json")" = 404 ]; }
 web_gone() { [ "$(code -u "skywatch:$TOKEN" "$URL/api/flights")" = 404 ]; }
 port_closed() { [ "$(code "$URL/")" = 000 ]; }
+view_open() { [ "$(code "$URL/api/flights")" = 200 ]; }
+view_closed() { [ "$(code "$URL/api/flights")" = 401 ]; }
 mcp_needs_token() { [ "$(code -X POST "$URL/mcp" -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":14,"method":"ping"}')" = 401 ]; }
 
 # header authentication for /mcp is a switch, off by default: first the board answers without a token
@@ -103,8 +109,11 @@ r=$(req -X POST "$URL/mcp" -H 'Origin: http://evil.example' -H 'Content-Type: ap
 check "a browser request is refused even then (403)"                   "echo \"\$r\" | head -1 | grep -q 403"
 r=$(req "$URL/mcp/server-card")
 check "the Server Card lists no required header while it is off"        "echo \"\$r\" | head -1 | grep -q 200 && ! echo \"\$r\" | grep -q 'Bearer' && ! echo \"\$r\" | grep -q '\"headers\"'"
-r=$(req "$URL/")
-check "the web page needs the token regardless (401)"                  "echo \"\$r\" | head -1 | grep -q 401"
+r=$(req "$URL/api/flights")
+check "the plane list's JSON needs no login by default (200)"          "echo \"\$r\" | head -1 | grep -q 200"
+r=$(req "$URL/settings")
+check "the settings page needs the token even then (401)"              "echo \"\$r\" | head -1 | grep -q 401"
+check "'set webauth on' (typed at an emulated time) puts the login on the plane list" "waitfor view_closed"
 check "'set mcpauth on' (typed at an emulated time) makes /mcp need a token (401)" "waitfor mcp_needs_token"
 r=$(req "$URL/mcp/server-card")
 check "the Server Card now lists the Authorization and X-API-Key headers" "echo \"\$r\" | grep -q 'Bearer {token}' && echo \"\$r\" | grep -q 'X-API-Key' && ! echo \"\$r\" | grep -q '$TOKEN'"
@@ -181,6 +190,21 @@ check "plane data is refreshed periodically (age reset at least twice, never old
 for i in 1 2 3 4 5; do curl -s -o /dev/null -m 15 -X POST "$URL/mcp" -H 'Authorization: Bearer WRONGTOKEN' -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":9,"method":"ping"}' || true; done
 r=$(RPC '{"jsonrpc":"2.0","id":10,"method":"ping"}')
 check "five wrong tokens lock the board out for a minute (429), even for the right one" "echo \"\$r\" | head -1 | grep -q 429"
+
+# 'set webauth off' opens only the read-only part of the web page; the settings keep their login. (A request with no
+# credentials is not counted towards the lock-out, so these checks cannot lock the board.)
+check "'set webauth off' opens the plane list's JSON without a login"  "waitfor view_open"
+r=$(req "$URL/")
+check "the plane list page opens without a login too"                  "echo \"\$r\" | head -1 | grep -q 200 && echo \"\$r\" | grep -q '<title>skywatch</title>'"
+r=$(req "$URL/api/status")
+check "/api/status opens without a login and still holds no secret"    "echo \"\$r\" | head -1 | grep -q 200 && echo \"\$r\" | grep -q '\"firmware\":\"emu\"' && ! echo \"\$r\" | grep -Eqi 'token|password|ssid'"
+r=$(req "$URL/settings")
+check "the settings page still needs the token (401)"                  "echo \"\$r\" | head -1 | grep -q 401"
+r=$(req -X POST "$URL/save" --data 'ssid=evil&pass=x&loc=auto&radius=10&plane=7&night=off&from=1&to=5&web=on&mcp=on')
+check "saving settings still needs the token (401)"                    "echo \"\$r\" | head -1 | grep -q 401"
+r=$(req -u "skywatch:$TOKEN" "$URL/settings")
+check "the settings page opens with the token"                          "echo \"\$r\" | head -1 | grep -q 200 && echo \"\$r\" | grep -q 'name=webauth'"
+check "'set webauth on' closes the plane list again (401)"             "waitfor view_closed"
 
 # the switches: each is turned off by a serial command at a later emulated time (see actions.txt); wait for the effect
 check "'set advertise off' withdraws the public Server Card and the catalog (404)" "waitfor card_gone"

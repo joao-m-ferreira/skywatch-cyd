@@ -118,6 +118,11 @@ void sendForm(const char* error) {
   h += ">Off</option><option value=on";
   h += gCfg->adv_on ? " selected" : "";
   h += ">On</option></select><small>The name skywatch.local, the _mcp._tcp service and the public Server Card. Off hides the board; use its IP address.</small>";
+  h += "<label>Web page login</label><select name=webauth><option value=off";
+  h += gCfg->web_open ? " selected" : "";
+  h += ">Off: anyone on the network can see the plane list (settings always ask for the token)</option><option value=on";
+  h += gCfg->web_open ? "" : " selected";
+  h += ">On: the plane list asks for the token too</option></select>";
   h += "<label>MCP server (for AI assistants)</label><select name=mcp><option value=off";
   h += gCfg->mcp_on ? "" : " selected";
   h += ">Off</option><option value=on";
@@ -170,6 +175,7 @@ void handleSave() {
   }
   if (ok && gServer->arg("contact").length()) ok = run(&tmp, "set contact " + gServer->arg("contact"), &why);
   if (ok && gServer->hasArg("web")) ok = run(&tmp, String("set web ") + (gServer->arg("web") == "on" ? "on" : "off"), &why);
+  if (ok && gServer->hasArg("webauth")) ok = run(&tmp, String("set webauth ") + (gServer->arg("webauth") == "off" ? "off" : "on"), &why);
   if (ok && gServer->hasArg("mcp")) ok = run(&tmp, String("set mcp ") + (gServer->arg("mcp") == "on" ? "on" : "off"), &why);
   if (ok && gServer->hasArg("mcpauth")) ok = run(&tmp, String("set mcpauth ") + (gServer->arg("mcpauth") == "on" ? "on" : "off"), &why);
   if (ok && gServer->hasArg("adv")) ok = run(&tmp, String("set advertise ") + (gServer->arg("adv") == "on" ? "on" : "off"), &why);

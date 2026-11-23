@@ -16,6 +16,9 @@ struct Config {
   int night_end;     // hour 0..23 it comes back
   bool web_on;       // serve the dashboard and settings page on the board's address (needs the token); default on
   bool mcp_on;       // serve the MCP endpoint (/mcp, read-only tools; needs the token); default on
+  bool web_open;     // the plane list and /api/* need no login ('set webauth off'); settings always do. Default true. Settings saved
+                     // before this field existed hold zero here, which means "login required": an update never opens a board
+  bool debug_log;    // print optional diagnostics, such as the web server's address at start-up ('set debug on'); default off
   bool mcp_auth;     // require the access token in an HTTP header (Authorization: Bearer, or X-API-Key) for /mcp; default off
   bool adv_on;       // announce the board on the network (mDNS name and _mcp._tcp) and serve the public Server Card; default on
   char token[33];    // access token for both; generated when either is first switched on

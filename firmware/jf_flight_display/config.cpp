@@ -64,6 +64,8 @@ const char kHelp[] PROGMEM =
     "  set night off|on       disable / enable night mode\n"
     "  set web on|off         web page on the board (planes + settings), needs the access token; default on\n"
     "  set mcp on|off         MCP server at /mcp (read-only tools for AI assistants), needs the token; default on\n"
+    "  set debug on|off       print optional diagnostics (the web server's address at start-up...); default off\n"
+    "  set webauth on|off     login for the web page (default on); off opens only the plane list and /api/*, settings still need the token\n"
     "  set mcpauth on|off     require the token for /mcp in a header (Authorization: Bearer <token> or X-API-Key); default off\n"
     "  set advertise on|off   announce the board on the network (skywatch.local, _mcp._tcp) and serve its public\n"
     "                         Server Card / AI Catalog; default on\n"
@@ -182,6 +184,8 @@ void configDefaults(Config* c, const char* ssid, const char* pass, double lat, d
   c->mcp_on = true;
   c->adv_on = true;
   c->mcp_auth = false;
+  c->debug_log = false;
+  c->web_open = true;  // default: the plane list needs no login (the settings page and saving always do)
   c->token[0] = '\0';
   copy(c->tz, sizeof c->tz, kDefaultTz);
   c->auto_loc = true;
@@ -278,13 +282,13 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
   if (strcasecmp(p, "show") == 0) {
     snprintf(reply, n,
              "ssid     %s\npass     %s\nlocation %s\nlat      %.5f\nlon      %.5f\nradius   %d km\n"
-             "contact  %s\nnight    %s (%02d:00 - %02d:00)\nwake     %d min (touch at night)\nplane    %d s each, at most %d planes\nweb      %s, mcp %s (header auth %s), advertise %s, token %s\ntz       %s\n"
+             "contact  %s\nnight    %s (%02d:00 - %02d:00)\nwake     %d min (touch at night)\nplane    %d s each, at most %d planes\nweb      %s (%s), mcp %s (header auth %s), advertise %s, token %s, debug %s\ntz       %s\n"
              "display  %s, invert %s, rgb %s, rotation %d, layout %s, led %d%%, backlight GPIO %d, touch %s, i2c %d/%d\n",
              c->ssid[0] ? c->ssid : "(not set)", c->pass[0] ? "****" : "(empty)",
              c->auto_loc ? "auto (geojs.io, from your public IP)" : "static", c->lat, c->lon,
              c->radius_km, c->contact, c->night_on ? "on" : "off", c->night_start, c->night_end,
-             c->wake_min, c->plane_sec, c->max_planes, c->web_on ? "on" : "off", c->mcp_on ? "on" : "off",
-             c->mcp_auth ? "on" : "off", c->adv_on ? "on" : "off", c->token[0] ? "set" : "(none)", c->tz, panelName(c->panel), c->invert ? "on" : "off",
+             c->wake_min, c->plane_sec, c->max_planes, c->web_on ? "on" : "off", c->web_open ? "plane list open, settings need login" : "login",
+             c->mcp_on ? "on" : "off", c->mcp_auth ? "on" : "off", c->adv_on ? "on" : "off", c->token[0] ? "set" : "(none)", c->debug_log ? "on" : "off", c->tz, panelName(c->panel), c->invert ? "on" : "off",
              c->rgb_swap ? "swap" : "normal", c->rotation,
              c->layout == 1 ? "side" : c->layout == 2 ? "flip" : c->layout == 3 ? "stacked" : "auto", c->led_pct, c->bl_pin,
              c->touch_shared ? "shared bus" : "own bus", c->i2c_sda, c->i2c_scl);
@@ -498,8 +502,15 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
       return CmdAction::None;
     }
     c->led_pct = a;
+  } else if (strcasecmp(key, "debug") == 0) {
+    if (strcasecmp(value, "on") != 0 && strcasecmp(value, "off") != 0) {
+      snprintf(reply, n, "error: debug is on or off\n");
+      return CmdAction::None;
+    }
+    c->debug_log = strcasecmp(value, "on") == 0;
+    redraw_only = true;  // saved at once; nothing to reconnect or restart
   } else if (strcasecmp(key, "web") == 0 || strcasecmp(key, "mcp") == 0 || strcasecmp(key, "advertise") == 0 ||
-             strcasecmp(key, "mcpauth") == 0) {
+             strcasecmp(key, "mcpauth") == 0 || strcasecmp(key, "webauth") == 0) {
     bool on;
     if (strcasecmp(value, "on") == 0) on = true;
     else if (strcasecmp(value, "off") == 0) on = false;
@@ -510,6 +521,7 @@ CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
     if (strcasecmp(key, "web") == 0) c->web_on = on;
     else if (strcasecmp(key, "mcp") == 0) c->mcp_on = on;
     else if (strcasecmp(key, "mcpauth") == 0) c->mcp_auth = on;
+    else if (strcasecmp(key, "webauth") == 0) c->web_open = !on;  // "webauth on" = login required
     else c->adv_on = on;
   } else if (strcasecmp(key, "token") == 0) {
     const size_t len = strlen(value);
