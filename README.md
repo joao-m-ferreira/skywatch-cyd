@@ -143,6 +143,9 @@ saved WiFi meanwhile, and leaves setup mode on its own once it is connected. To 
 serial, or hold the board's button for 3 seconds on the T-Display, M5StickC and OLED boards.
 
 ## Web page and MCP server
+The full reference (routes, the JSON API, every MCP tool and error, discovery and troubleshooting) is in
+[docs/network-interfaces.md](docs/network-interfaces.md); this is the short version.
+
 Both are **on by default** and each has its own switch (and a third one for the announcement, below): `set web off`,
 `set mcp off` and `set advertise off` over serial, or the three selects in the setup page and the tick boxes in the
 portal's setup form (More settings). The first time either is on, the board makes an **access token** and prints it
@@ -195,8 +198,8 @@ AXP192 chip, which the firmware sets up; the C Plus and Plus2 have other screens
 The small **ESP8266** boards with a built-in 0.96" OLED (ESP-12 style, the screen on SDA GPIO 14 and SCL GPIO 12) run a
 separate, smaller build (`esp8266-oled`) that shares the flight parsing, the OLED text and the serial commands with the
 ESP32 build (`firmware/skywatch_esp8266/`; `scripts/stage_esp8266.sh` gathers the shared files next to it, because the
-Arduino tools compile a copy of the sketch folder). It shows the same four text rows and the FLASH button shows the next
-plane; the serial settings (`set ssid`, `set radius`, `set plane`, `set night`...) and the browser setup in the portal
+Arduino tools compile a copy of the sketch folder). It shows the same four text rows (the airline row alternates with the route as airport codes, for example `LIS > YYZ`, looked
+up once per flight on adsbdb.com) and the FLASH button shows the next plane; the serial settings (`set ssid`, `set radius`, `set plane`, `set night`...) and the browser setup in the portal
 work as on the other boards. It has **no 3D model, photos, WiFi setup page, web page or MCP server**: the chip has about
 80 KB of RAM, and the TLS connection to the data source needs a 8 KB receive buffer plus about 8 KB more (the servers
 refuse small TLS records), leaving roughly 10 KB free while it fetches. The image is one file flashed at `0x0`, so

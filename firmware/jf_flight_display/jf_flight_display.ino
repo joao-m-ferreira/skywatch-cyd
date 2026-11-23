@@ -1208,26 +1208,31 @@ void loop() {
     drawScreen();
     Serial.printf("drawn in %u ms, free heap %u\n", static_cast<unsigned>(millis() - t0),
                   static_cast<unsigned>(ESP.getFreeHeap()));
-    // Photos: fetch the current plane's first (redraw when it arrives), then the next one's.
-    if (flightCount > 0 && !safeMode && !isOled()) {
+    // Routes (every screen shows them) and photos (colour screens only; the OLED has no room): the current plane's
+    // first (redraw when it arrives), then the next one's.
+    if (flightCount > 0 && !safeMode) {
       esp_task_wdt_reset();
       if (jf::routePrefetch(flights[selected].callsign)) drawScreen();
       esp_task_wdt_reset();
-      if (jf::photoPrefetch(flights[selected].reg)) drawScreen();
+      if (!isOled() && jf::photoPrefetch(flights[selected].reg)) drawScreen();
       esp_task_wdt_reset();
       if (flightCount > 1) {
         const jf::Flight& nx = flights[(selected + 1) % flightCount];
         jf::routePrefetch(nx.callsign);
         esp_task_wdt_reset();
-        jf::photoPrefetch(nx.reg);
+        if (!isOled()) jf::photoPrefetch(nx.reg);
       }
     }
-    if (flightCount > 0 && compactScreen() && !safeMode) {  // the prefetches took time: give the plane its full time again
+    if (flightCount > 0 && (compactScreen() || isOled()) && !safeMode) {  // the prefetches took time: give the plane its full time again
       pageStart = lastRotate = millis();
       shownPage = 0;
-      char route[24];
-      const bool haveRoute = screenRoute(route, sizeof route);
-      drawPlateField(tft, flights[selected], 0, cfg.layout, haveRoute ? route : nullptr);
+      if (isOled()) {
+        drawScreen();
+      } else {
+        char route[24];
+        const bool haveRoute = screenRoute(route, sizeof route);
+        drawPlateField(tft, flights[selected], 0, cfg.layout, haveRoute ? route : nullptr);
+      }
     }
   }
   housekeeping(now, false);

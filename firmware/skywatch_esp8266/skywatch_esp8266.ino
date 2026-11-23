@@ -44,6 +44,18 @@ jf::Config cfg;
 jf::Flight flights[jf::kMaxFlights];
 int flightCount = 0;
 int selected = 0;
+// Routes found so far (adsbdb.com, by callsign): a few slots, replaced round-robin. `text` is "LIS > YYZ", empty when the
+// service did not know the flight (kept so it is not asked again).
+struct RouteSlot {
+  char callsign[12];
+  char text[12];
+};
+constexpr size_t kRouteSlots = 8;
+RouteSlot routes[kRouteSlots];
+size_t nextRouteSlot = 0;
+char pageCall[12] = "";  // the plane the airline/route alternation is timed for
+uint32_t pageStartMs = 0;
+bool shownRoutePage = false;
 uint32_t lastFetchMs = 0, lastGoodMs = 0, lastRotateMs = 0, lastDrawMs = 0, wifiStartMs = 0, wakeUntilMs = 0;
 bool fetchedOnce = false, fetchFailed = false, geoDone = false, clockStarted = false, screenOff = false, netChanged = true;
 char lastError[48] = "";
@@ -106,7 +118,7 @@ void message(const char* l1, const char* l2 = "", const char* l3 = "") {
 }
 
 // The plane on screen as four rows of text: call sign and type, airline, altitude and speed, distance and bearing.
-void drawPlane() {
+void drawPlane(const char* route) {
   const jf::Flight& f = flights[selected];
   const jf::Airline* al = jf::airlineFor(f.callsign);
   jf::OledText t;
@@ -116,13 +128,44 @@ void drawPlane() {
   u8g2.drawStr(0, 14, t.call);
   u8g2.setFont(u8g2_font_7x13_tr);
   u8g2.drawStr(128 - u8g2.getStrWidth(t.type), 13, t.type);
-  u8g2.drawStr(0, 30, t.airline);
+  u8g2.drawStr(0, 30, route != nullptr ? route : t.airline);  // the route replaces the airline row on alternate pages
   u8g2.drawStr(0, 46, t.alt_speed);
   u8g2.drawStr(0, 62, t.dist_dir);
   u8g2.sendBuffer();
 }
 
 // Draws a status message (not set up, connecting, fetching, no aircraft, fetch failed) or the selected plane.
+// The route text of a callsign, or nullptr when unknown.
+const char* routeText(const char* callsign) {
+  for (const RouteSlot& r : routes) {
+    if (r.text[0] != '\0' && strcmp(r.callsign, callsign) == 0) return r.text;
+  }
+  return nullptr;
+}
+
+// True when the callsign has been looked up before (whether or not the service knew it).
+bool routeTried(const char* callsign) {
+  for (const RouteSlot& r : routes) {
+    if (r.callsign[0] != '\0' && strcmp(r.callsign, callsign) == 0) return true;
+  }
+  return false;
+}
+
+// Whether the row that alternates between the airline and the route should show the route now: the time per plane is
+// shared between the two, each for at least a second, and the alternation restarts with every new plane.
+bool routePageNow() {
+  if (flightCount == 0 || selected >= flightCount) return false;
+  const char* cs = flights[selected].callsign;
+  if (strcmp(pageCall, cs) != 0) {
+    snprintf(pageCall, sizeof pageCall, "%s", cs);
+    pageStartMs = millis();
+  }
+  if (routeText(cs) == nullptr) return false;
+  uint32_t half = static_cast<uint32_t>(cfg.plane_sec) * 500UL;
+  if (half < 1000) half = 1000;
+  return ((millis() - pageStartMs) / half) % 2 == 1;
+}
+
 void drawScreen() {
   if (!jf::configWifiReady(cfg)) {
     message("WiFi not set up", "USB serial 115200:", "type 'help'");
@@ -132,7 +175,8 @@ void drawScreen() {
     message(fetchFailed ? "Fetch failed" : "No aircraft", fetchFailed ? lastError : "in range");
   } else {
     if (selected >= flightCount) selected = 0;
-    drawPlane();
+    drawPlane(routePageNow() ? routeText(flights[selected].callsign) : nullptr);
+    shownRoutePage = routePageNow();
   }
   lastDrawMs = millis();
 }
@@ -246,6 +290,30 @@ bool fetchFlights() {
   if (fetchOnce()) return true;
   delay(500);
   return fetchOnce();  // a connection can drop mid-body: one retry fixes it
+}
+
+// Looks up where a flight is going (adsbdb.com, by callsign) and remembers the answer, also when there is none. Only the
+// airport codes are kept: they are what fits a 128-pixel row ("LIS > YYZ"). Blocking, about 1-3 s.
+bool fetchRoute(const char* callsign) {
+  for (const char* c = callsign; *c != '\0'; ++c) {
+    if (!isalnum(static_cast<unsigned char>(*c))) return false;  // the callsign goes into a URL: letters and digits only
+  }
+  RouteSlot* r = &routes[nextRouteSlot];
+  nextRouteSlot = (nextRouteSlot + 1) % kRouteSlots;
+  memset(r, 0, sizeof *r);
+  snprintf(r->callsign, sizeof r->callsign, "%s", callsign);
+  char url[64];
+  snprintf(url, sizeof url, "https://api.adsbdb.com/v0/callsign/%s", callsign);
+  JsonDocument filter, doc;
+  filter["response"]["flightroute"]["origin"]["iata_code"] = true;
+  filter["response"]["flightroute"]["destination"]["iata_code"] = true;
+  if (!httpsJson("api.adsbdb.com", url, filter, doc)) return false;
+  JsonObjectConst fr = doc["response"]["flightroute"];  // an unknown callsign answers with a plain string instead
+  const char* o = fr["origin"]["iata_code"] | "";
+  const char* d = fr["destination"]["iata_code"] | "";
+  if (o[0] != '\0' || d[0] != '\0') snprintf(r->text, sizeof r->text, "%.3s > %.3s", o[0] != '\0' ? o : "?", d[0] != '\0' ? d : "?");
+  Serial.printf("route %s: %s\n", callsign, r->text[0] != '\0' ? r->text : "none");
+  return r->text[0] != '\0';
 }
 
 // Approximate position from the public IP (city level), only while the location is "auto".
@@ -546,6 +614,11 @@ void loop() {
     lastRotateMs = now;
     redraw = true;
   }
+  if (online && flightCount > 0 && selected < flightCount && !routeTried(flights[selected].callsign)) {
+    if (fetchRoute(flights[selected].callsign)) redraw = true;  // each callsign is asked once
+    pageStartMs = millis();                                      // the lookup took a while: restart the alternation
+  }
+  if (flightCount > 0 && routePageNow() != shownRoutePage) redraw = true;  // the airline / route row flips
   if (redraw || lastDrawMs == 0) drawScreen();
 
   // Nothing fetched for 10 minutes although WiFi is configured: restart.
