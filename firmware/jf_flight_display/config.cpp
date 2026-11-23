@@ -65,7 +65,7 @@ const char kHelp[] PROGMEM =
     "  set web on|off         web page on the board (planes + settings), needs the access token; default on\n"
     "  set mcp on|off         MCP server at /mcp (read-only tools for AI assistants), needs the token; default on\n"
     "  set debug on|off       print optional diagnostics (the web server's address at start-up...); default off\n"
-    "  set webauth on|off     login for the web page (default on); off opens only the plane list and /api/*, settings still need the token\n"
+    "  set webauth on|off     login for the web page (default off = no login at all, settings included)\n"
     "  set mcpauth on|off     require the token for /mcp in a header (Authorization: Bearer <token> or X-API-Key); default off\n"
     "  set advertise on|off   announce the board on the network (skywatch.local, _mcp._tcp) and serve its public\n"
     "                         Server Card / AI Catalog; default on\n"

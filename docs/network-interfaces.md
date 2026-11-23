@@ -7,7 +7,7 @@ not been used from another computer yet (the ESP8266 starts the server, announce
 
 | Interface | Address | Needs | Switch (default) |
 |---|---|---|---|
-| [Web page](#web-interface) | `http://skywatch.local/` | nothing for the plane list; the token (login `skywatch`) for settings | `set web on\|off` (on), `set webauth on\|off` (off) |
+| [Web page](#web-interface) | `http://skywatch.local/` | nothing, or the token (login `skywatch`) with `set webauth on` | `set web on\|off` (on), `set webauth on\|off` (off) |
 | [JSON API](#json-api) | `/api/flights`, `/api/status` | nothing, or the token with `set webauth on` | follows the web page |
 | [MCP server](#mcp-server) | `POST /mcp` | token only if header authentication is on | `set mcp on\|off` (on), `set mcpauth on\|off` (off) |
 | [Discovery](#discovery) | mDNS `skywatch.local`, `_mcp._tcp`; `/mcp/server-card`; `/.well-known/ai-catalog.json` | nothing (public, no secrets) | `set advertise on\|off` (on) |
@@ -158,7 +158,7 @@ A read-only [Model Context Protocol](https://modelcontextprotocol.io/) server, s
 - **Endpoint:** `POST http://skywatch.local/mcp`, one JSON-RPC 2.0 request in the body, one response back (`Content-Type: application/json`).
   Stateless: no sessions, no streaming. Protocol version `2025-03-26`.
 - **Authentication:** off by default. With `set mcpauth on`, send the token as `Authorization: Bearer <token>` or `X-API-Key: <token>`.
-  Off, anyone on your network can read the planes and the status (all the tools are read-only). The web page always needs the token.
+  Off, anyone on your network can read the planes and the status (all the tools are read-only). The web page follows `set webauth`.
 - **Browsers are refused:** a request with an `Origin` header gets `403`, so a web page open in your browser cannot talk to the board.
 - **Methods:** `initialize`, `ping`, `tools/list`, `tools/call`. A notification (no `id`, such as `notifications/initialized`) gets `202` and no body.
 
@@ -224,7 +224,7 @@ connected. The web page, API and MCP are not served while it is open.
 | Command | What |
 |---|---|
 | `set web on\|off` | web page and JSON API |
-| `set webauth on\|off` | login for the plane list and `/api/*` (default off: open on your network). The settings page and saving always need the token |
+| `set webauth on\|off` | login for the plane list and `/api/*` (default off: open on your network). With it on, the settings page and saving need the token too; with it off they need none |
 | `set debug on\|off` | print optional diagnostics, such as the web address at start-up (default off) |
 | `set mcp on\|off` | MCP endpoint |
 | `set mcpauth on\|off` | require the token in a header for `/mcp` (default off) |

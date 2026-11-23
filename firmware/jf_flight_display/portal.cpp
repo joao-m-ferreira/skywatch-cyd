@@ -120,9 +120,9 @@ void sendForm(const char* error) {
   h += ">On</option></select><small>The name skywatch.local, the _mcp._tcp service and the public Server Card. Off hides the board; use its IP address.</small>";
   h += "<label>Web page login</label><select name=webauth><option value=off";
   h += gCfg->web_open ? " selected" : "";
-  h += ">Off: anyone on the network can see the plane list (settings always ask for the token)</option><option value=on";
+  h += ">Off: no login, anyone on the network can see the planes and change the settings</option><option value=on";
   h += gCfg->web_open ? "" : " selected";
-  h += ">On: the plane list asks for the token too</option></select>";
+  h += ">On: the planes and the settings ask for the token</option></select>";
   h += "<label>MCP server (for AI assistants)</label><select name=mcp><option value=off";
   h += gCfg->mcp_on ? "" : " selected";
   h += ">Off</option><option value=on";

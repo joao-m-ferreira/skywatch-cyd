@@ -428,7 +428,7 @@ int main() {
     CHECK(c.web_on && c.mcp_on && c.adv_on && c.token[0] == '\0');  // all on by default; the token is made when first needed
     CHECK(jf::configCommand(&c, "set web on", r, sizeof r) == jf::CmdAction::Changed && c.web_on);
     CHECK(jf::configCommand(&c, "set mcp on", r, sizeof r) == jf::CmdAction::Changed && c.mcp_on);
-    CHECK(c.web_open);  // the plane list needs no login by default; the settings always do
+    CHECK(c.web_open);  // no web login by default (settings included)
     CHECK(!c.debug_log);  // diagnostics are off by default
     CHECK(jf::configCommand(&c, "set debug on", r, sizeof r) == jf::CmdAction::Redraw && c.debug_log);  // saved at once, no reconnect
     CHECK(jf::configCommand(&c, "set debug maybe", r, sizeof r) == jf::CmdAction::None && c.debug_log);
