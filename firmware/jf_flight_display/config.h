@@ -47,6 +47,12 @@ constexpr const char* kDefaultTz = "WET0WEST,M3.5.0/1,M10.5.0";  // Lisbon
 // A short name of a panel setting ("ILI9341", "M5StickC", ...) for status output.
 const char* panelName(int panel);
 
+// Brings stored settings back into the ranges the commands accept: clamps every number and choice, terminates every
+// string and repairs an impossible location or pin pair, replacing what is out of range with the default. Settings
+// read from flash can be corrupt or written by another firmware version, and an out-of-range pin, rotation or timing
+// would otherwise reach the display driver or the carousel. Returns how many fields were changed (0 for good data).
+int configSanitize(Config* c);
+
 // Fills `c` with the build-time defaults (from secrets.h).
 void configDefaults(Config* c, const char* ssid, const char* pass, double lat, double lon,
                     int radius_km, const char* contact);

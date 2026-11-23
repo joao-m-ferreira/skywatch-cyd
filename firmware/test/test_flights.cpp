@@ -5,6 +5,7 @@
 #include "../jf_flight_display/board.h"
 #include "../jf_flight_display/airline.h"
 #include "../jf_flight_display/config.h"
+#include "../jf_flight_display/crc_util.h"
 #include "../jf_flight_display/flights.h"
 #include "../jf_flight_display/layout.h"
 #include "../jf_flight_display/mcp.h"
@@ -539,6 +540,44 @@ int main() {
     jf::McpContext empty;
     jf::mcpHandle(cur, strlen(cur), empty, out, sizeof out);
     CHECK(strstr(out, "No aircraft in range"));
+  }
+
+  // Resiliency: stored settings are sanitised, and flash checksums detect damage.
+  {
+    jf::Config g;
+    jf::configDefaults(&g, "s", "p", 38.7, -9.1, 40, "a@b.pt");
+    CHECK(jf::configSanitize(&g) == 0);  // good data is left alone
+    CHECK(g.lat == 38.7 && g.lon == -9.1 && g.radius_km == 40 && g.plane_sec == 6);
+    // garbage: every byte 0xFF (what an erased flash sector reads as) must come out valid
+    jf::Config bad;
+    memset(&bad, 0xFF, sizeof bad);
+    CHECK(jf::configSanitize(&bad) > 0);
+    CHECK(bad.radius_km >= 1 && bad.radius_km <= 250 && bad.plane_sec >= 3 && bad.plane_sec <= 120);
+    CHECK(bad.max_planes >= 1 && bad.max_planes <= jf::kMaxPlanesLimit && bad.wake_min >= 1 && bad.wake_min <= 120);
+    CHECK(bad.night_start >= 0 && bad.night_start <= 23 && bad.night_end >= 0 && bad.night_end <= 23);
+    CHECK(bad.panel >= 0 && bad.panel <= 8 && bad.rotation >= 0 && bad.rotation <= 3 && bad.layout >= 0 && bad.layout <= 3);
+    CHECK(bad.led_pct >= 0 && bad.led_pct <= 100 && bad.bl_pin >= 0 && bad.bl_pin <= 48);
+    CHECK(bad.i2c_sda != bad.i2c_scl && bad.i2c_sda >= 0 && bad.i2c_scl >= 0);
+    CHECK(bad.lat == 0.0 && bad.lon == 0.0 && bad.auto_loc);  // impossible position: look it up again
+    CHECK(strlen(bad.ssid) < sizeof bad.ssid && strlen(bad.pass) < sizeof bad.pass && strlen(bad.contact) < sizeof bad.contact);
+    CHECK(strlen(bad.tz) < sizeof bad.tz && strlen(bad.token) < sizeof bad.token && strcmp(bad.tz, jf::kDefaultTz) == 0);
+    CHECK(bad.ssid[0] == '\0' && bad.pass[0] == '\0' && bad.contact[0] == '\0' && bad.token[0] == '\0');  // erased flash is not text
+    jf::Config few = g;  // single bad fields are repaired one by one
+    few.plane_sec = 0;
+    few.rotation = 9;
+    few.lat = 95.0;
+    few.i2c_sda = few.i2c_scl = 5;
+    CHECK(jf::configSanitize(&few) == 4 && few.plane_sec == 6 && few.rotation == 1 && few.auto_loc && few.i2c_sda != few.i2c_scl);
+    jf::Config nan_pos = g;
+    nan_pos.lat = nan_pos.lon = 0.0 / 0.0;
+    CHECK(jf::configSanitize(&nan_pos) == 1 && nan_pos.auto_loc);  // NaN is not a position
+    // CRC-32: the standard check value, and any change is noticed
+    CHECK(jf::crc32("123456789", 9) == 0xCBF43926u);
+    unsigned char blob[64];
+    memset(blob, 0x5A, sizeof blob);
+    const uint32_t before = jf::crc32(blob, sizeof blob);
+    blob[17] ^= 0x01;
+    CHECK(jf::crc32(blob, sizeof blob) != before);
   }
 
   // Screen layouts: every element fits every panel shape in every mode, the plane's area and the

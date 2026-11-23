@@ -25,12 +25,14 @@ const char kHead[] =
     "button{margin-top:1.4em;width:100%;padding:.8em;font-size:1.05rem;border:0;border-radius:6px;background:#962820;color:#fff}"
     ".err{background:#fbe3df;border:1px solid #962820;padding:.6em;border-radius:6px}</style><body>";
 
+// Appends text to the page, HTML-escaped (SSIDs and contacts are untrusted input).
 void appendEscaped(String& out, const char* text) {
   char buf[140];
   jf::htmlEscape(text, buf, sizeof buf);
   out += buf;
 }
 
+// Appends a labelled text input holding its current value.
 void appendInput(String& out, const char* label, const char* name, const char* value, const char* extra = "") {
   out += "<label>";
   out += label;
@@ -43,6 +45,7 @@ void appendInput(String& out, const char* label, const char* name, const char* v
   out += ">";
 }
 
+// Serves the settings form, with an error message above it when there is one.
 void sendForm(const char* error) {
   String h = kHead;
   h += "<h1>skywatch setup</h1><p>Choose your WiFi and where you are. The display then joins your WiFi on its own.</p>";
@@ -135,8 +138,14 @@ bool run(jf::Config* tmp, const String& cmd, String* why) {
   return true;
 }
 
+// Applies a posted form. Every value goes through the same parser as the serial commands, on a copy of the settings:
+// one wrong value changes nothing.
 void handleSave() {
   if (gGuard != nullptr && !gGuard()) return;
+  if (gServer->args() > 24) {  // the form has about a dozen fields
+    sendForm("Too many fields.");
+    return;
+  }
   for (int i = 0; i < gServer->args(); ++i) {
     if (!jf::formValueOk(gServer->arg(i).c_str())) {
       sendForm("A value had a line break or control character.");
@@ -198,6 +207,7 @@ void handleSave() {
   if (gSaved != nullptr) gSaved();
 }
 
+// GET handler for the settings page (behind the guard, when there is one).
 void handleForm() {
   if (gGuard != nullptr && !gGuard()) return;
   sendForm(nullptr);
@@ -211,6 +221,7 @@ void redirectToPortal() {  // phones probe a few well-known addresses; sending t
 
 namespace jf {
 
+// Registers the settings routes on a server; see portal.h.
 void settingsRegister(WebServer* server, Config* cfg, void (*on_saved)(), bool (*guard)(), bool setup_mode) {
   gServer = server;
   gCfg = cfg;
@@ -222,6 +233,7 @@ void settingsRegister(WebServer* server, Config* cfg, void (*on_saved)(), bool (
   if (setup_mode) server->on("/", HTTP_GET, handleForm);
 }
 
+// Starts setup mode: the access point, the captive-portal DNS and the settings page.
 void portalStart(Config* cfg, const char* ap_ssid, const char* ap_pass, void (*on_saved)()) {
   if (gServer != nullptr) portalStop();
   WiFi.mode(WIFI_AP_STA);  // the station side keeps trying to join the saved network
@@ -236,12 +248,14 @@ void portalStart(Config* cfg, const char* ap_ssid, const char* ap_pass, void (*o
   WiFi.scanNetworks(true);  // async: the list is ready by the time the page is opened
 }
 
+// Serves pending DNS and HTTP requests.
 void portalLoop() {
   if (gServer == nullptr) return;
   gDns->processNextRequest();
   gServer->handleClient();
 }
 
+// Closes the setup page and the access point.
 void portalStop() {
   if (gServer != nullptr) {
     gServer->stop();

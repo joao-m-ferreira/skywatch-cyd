@@ -92,6 +92,7 @@ bool authorised(bool basic_challenge, bool allow_api_key = false) {
   return false;
 }
 
+// Guards the web page routes: 404 when the web page is off, otherwise the access token is required.
 bool pageGuard() {
   if (!gCfg->web_on) {
     gServer->send(404, "text/plain", "Not found\n");
@@ -100,11 +101,13 @@ bool pageGuard() {
   return authorised(true);
 }
 
+// GET /: the planes page, a small page that polls /api/flights.
 void handleDashboard() {
   if (!pageGuard()) return;
   gServer->send_P(200, "text/html", kDashboard);
 }
 
+// Builds a JSON document into a temporary buffer and sends it (503 when memory is short).
 void sendJson(size_t (*build)(const jf::McpContext&, int, char*, size_t), int limit) {
   const size_t cap = 6144;
   char* buf = static_cast<char*>(malloc(cap));
@@ -120,11 +123,13 @@ void sendJson(size_t (*build)(const jf::McpContext&, int, char*, size_t), int li
 
 size_t statusAdapter(const jf::McpContext& c, int, char* out, size_t n) { return jf::statusJson(c, out, n); }
 
+// GET /api/flights: the planes as JSON.
 void handleFlights() {
   if (!pageGuard()) return;
   sendJson(jf::flightsJson, 0);
 }
 
+// GET /api/status: the board's status as JSON (nothing secret in it).
 void handleStatus() {
   if (!pageGuard()) return;
   sendJson(statusAdapter, 0);
@@ -141,6 +146,7 @@ void handleCard() {
   else gServer->send(200, jf::kCardMediaType, buf);
 }
 
+// GET /.well-known/ai-catalog.json: points to the Server Card. Public by design; only while MCP and advertising are on.
 void handleCatalog() {
   if (!gCfg->mcp_on || !gCfg->adv_on) {
     gServer->send(404, "text/plain", "Not found\n");
@@ -151,6 +157,8 @@ void handleCatalog() {
   else gServer->send(200, jf::kCatalogMediaType, buf);
 }
 
+// POST /mcp: one JSON-RPC request in, one response out. Requests from a browser (with an Origin header) are
+// refused, and the token is required when header authentication is on.
 void handleMcp() {
   if (!gCfg->mcp_on) {
     gServer->send(404, "text/plain", "Not found\n");
@@ -171,6 +179,10 @@ void handleMcp() {
   const String body = gServer->arg("plain");
   if (body.length() == 0) {
     gServer->send(400, "text/plain", "Empty request.\n");
+    return;
+  }
+  if (body.length() > 8192) {  // a JSON-RPC request here is a few hundred bytes; never parse something huge on this heap
+    gServer->send(413, "text/plain", "Request too large.\n");
     return;
   }
   const size_t cap = 8192;
@@ -226,8 +238,9 @@ void applyAdvertising() {
 }
 }  // namespace
 
+// Starts the web server on port 80, registers the routes and announces it on mDNS.
 void webStart(Config* cfg, McpSnapshot snapshot, void (*on_saved)()) {
-  if (gServer != nullptr) return;
+  if (gServer != nullptr || cfg == nullptr || snapshot == nullptr) return;  // nothing to serve without both
   gCfg = cfg;
   gSnapshot = snapshot;
   gFails = 0;
@@ -249,12 +262,14 @@ void webStart(Config* cfg, McpSnapshot snapshot, void (*on_saved)()) {
                 cfg->web_on ? " web page on" : "", cfg->mcp_on ? ", MCP at /mcp" : "");
 }
 
+// Serves pending requests and keeps the mDNS records in step with the settings.
 void webLoop() {
   if (gServer == nullptr) return;
   applyAdvertising();  // 'set mcp off' and 'set mcpauth' take effect at once; 'set advertise off' restarts the board
   gServer->handleClient();
 }
 
+// Stops the server and withdraws its mDNS services (the responder itself is never shut down: see applyAdvertising).
 void webStop() {
   if (gServer == nullptr) return;
   gServer->stop();

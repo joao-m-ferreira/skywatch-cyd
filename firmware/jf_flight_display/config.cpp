@@ -9,11 +9,13 @@
 namespace jf {
 namespace {
 
+// Copies a string into a fixed buffer: always terminated, truncated when too long.
 void copy(char* dst, size_t n, const char* src) {
   strncpy(dst, src, n - 1);
   dst[n - 1] = '\0';
 }
 
+// Strips leading and trailing whitespace in place and returns the start of the trimmed text.
 char* trim(char* s) {
   while (isspace(static_cast<unsigned char>(*s))) ++s;
   char* e = s + strlen(s);
@@ -21,6 +23,7 @@ char* trim(char* s) {
   return s;
 }
 
+// Parses text that is entirely a number inside [lo, hi]; false (and `out` untouched) otherwise.
 bool parseDouble(const char* s, double lo, double hi, double* out) {
   char* end = nullptr;
   const double v = strtod(s, &end);
@@ -29,6 +32,7 @@ bool parseDouble(const char* s, double lo, double hi, double* out) {
   return true;
 }
 
+// Parses text that is entirely a whole number inside [lo, hi]; false (and `out` untouched) otherwise.
 bool parseInt(const char* s, int lo, int hi, int* out) {
   char* end = nullptr;
   const long v = strtol(s, &end, 10);
@@ -83,6 +87,63 @@ const char kHelp[] =
 
 }  // namespace
 
+int configSanitize(Config* c) {
+  Config d;
+  configDefaults(&d, "", "", 0.0, 0.0, 40, "");  // what anything out of range is replaced with
+  int fixed = 0;
+  auto clampInt = [&fixed](int* v, int lo, int hi, int fallback) {
+    if (*v < lo || *v > hi) {
+      *v = fallback;
+      ++fixed;
+    }
+  };
+  c->ssid[sizeof c->ssid - 1] = '\0';  // a string without its terminator would run into the next field
+  c->pass[sizeof c->pass - 1] = '\0';
+  c->contact[sizeof c->contact - 1] = '\0';
+  c->tz[sizeof c->tz - 1] = '\0';
+  c->token[sizeof c->token - 1] = '\0';
+  // A string that starts with 0xFF is erased flash, not text. (WiFi names and passwords may hold any other byte.)
+  char* const texts[] = {c->ssid, c->pass, c->contact, c->token};  // (an array: this file avoids <initializer_list>)
+  for (char* str : texts) {
+    if (static_cast<unsigned char>(str[0]) == 0xFF) {
+      str[0] = '\0';
+      ++fixed;
+    }
+  }
+  bool tz_ok = c->tz[0] != '\0';  // a POSIX timezone is plain printable ASCII
+  for (const char* q = c->tz; *q != '\0'; ++q) tz_ok = tz_ok && *q >= 32 && *q < 127;
+  if (!tz_ok) {
+    copy(c->tz, sizeof c->tz, kDefaultTz);
+    ++fixed;
+  }
+  // A position outside the globe (or NaN, which fails both comparisons) falls back to "work it out from my address".
+  if (!(c->lat >= -90.0 && c->lat <= 90.0) || !(c->lon >= -180.0 && c->lon <= 180.0)) {
+    c->lat = c->lon = 0.0;
+    c->auto_loc = true;
+    ++fixed;
+  }
+  clampInt(&c->radius_km, 1, 250, d.radius_km);
+  clampInt(&c->night_start, 0, 23, d.night_start);
+  clampInt(&c->night_end, 0, 23, d.night_end);
+  clampInt(&c->wake_min, 1, 120, d.wake_min);
+  clampInt(&c->plane_sec, 3, 120, d.plane_sec);
+  clampInt(&c->max_planes, 1, kMaxPlanesLimit, d.max_planes);
+  clampInt(&c->panel, 0, 8, d.panel);
+  clampInt(&c->rotation, 0, 3, d.rotation);
+  clampInt(&c->layout, 0, 3, d.layout);
+  clampInt(&c->led_pct, 0, 100, d.led_pct);
+  clampInt(&c->bl_pin, 0, 48, d.bl_pin);
+  clampInt(&c->i2c_sda, 0, 48, d.i2c_sda);
+  clampInt(&c->i2c_scl, 0, 48, d.i2c_scl);
+  if (c->i2c_sda == c->i2c_scl) {  // one pin cannot be both lines
+    c->i2c_sda = d.i2c_sda;
+    c->i2c_scl = d.i2c_scl;
+    ++fixed;
+  }
+  return fixed;
+}
+
+// See config.h.
 const char* panelName(int panel) {
   switch (panel) {
     case 1: return "ST7789";
@@ -134,6 +195,7 @@ void configDefaults(Config* c, const char* ssid, const char* pass, double lat, d
 
 bool configSafeMode(int consecutive_crashes) { return consecutive_crashes >= 3; }
 
+// Maps an IANA timezone name ("Europe/Lisbon") to the POSIX string the clock needs; nullptr when unknown.
 const char* posixTzFor(const char* iana) {
   struct Row {
     const char* name;
@@ -174,16 +236,19 @@ const char* posixTzFor(const char* iana) {
   return nullptr;
 }
 
+// True when a WiFi name has been set (the placeholder from secrets.h.example does not count).
 bool configWifiReady(const Config& c) {
   return c.ssid[0] != '\0' && strcmp(c.ssid, "your-ssid") != 0;
 }
 
+// True when `hour` is inside the night window; the window may cross midnight.
 bool isNightHour(const Config& c, int hour) {
   if (!c.night_on || c.night_start == c.night_end) return false;
   if (c.night_start < c.night_end) return hour >= c.night_start && hour < c.night_end;
   return hour >= c.night_start || hour < c.night_end;  // across midnight
 }
 
+// See config.h: parses one serial/web command, edits the settings and says what the caller must do next.
 CmdAction configCommand(Config* c, const char* line, char* reply, size_t n) {
   char buf[200];
   copy(buf, sizeof buf, line);
