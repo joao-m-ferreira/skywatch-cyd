@@ -16,4 +16,4 @@ Then set `"counterUrl"` in `web/config.json` to that URL (no trailing slash) and
 `ALLOWED_ORIGIN` in `wrangler.toml` is the address of your portal.
 
 Privacy: it keeps one number per board and, for 60 seconds, a salted hash of the caller so that a
-double click is not counted twice. Test: `node --test workers/flash-counter/`.
+double click is not counted twice. Test: `node --test workers/flash-counter/test.mjs`.

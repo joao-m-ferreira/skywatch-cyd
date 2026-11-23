@@ -10,4 +10,4 @@ g++ -std=c++17 -Wall -Wextra -Werror -I"$AJ_DIR" \
 build/test_flights
 # the web-flash portal builder, and the flash counter worker (when node is installed)
 python3 scripts/build_site.py --self-test
-if command -v node >/dev/null 2>&1; then node --test workers/flash-counter/; fi
+if command -v node >/dev/null 2>&1; then node --test workers/flash-counter/test.mjs; fi
