@@ -76,6 +76,8 @@ Category categorize(const char* t) {
 #define DASH(c, L, S) {c, L, S, 0.f, 2.8f, 1.7f, 2.7f, .38f, 2, PP, 1.0f, 0}
 #define LIGHT(c, L, S) {c, L, S, 0.f, 1.6f, 1.1f, 1.3f, .30f, 0, PP, 0.5f, 0}
 #define BIZ(c, L, S) {c, L, S, 28.f, 3.0f, 1.0f, 2.3f, .42f, 2, RR, 1.3f, 0}
+// Citations, Learjets, Phenoms: nearly straight, short-chord wings
+#define BIZ_S(c, L, S) {c, L, S, 13.f, 2.2f, 1.1f, 2.0f, .44f, 2, RR, 1.1f, 0}
 #define BIG4(c, L, S) {c, L, S, 35.f, 13.f, 3.0f, 6.4f, .35f, 4, UW, 3.0f, 0}
 #define BIG6(c, L, S) {c, L, S, 30.f, 14.f, 3.5f, 6.4f, .35f, 6, UW, 2.9f, 0}
 #define B_707(c, L, S) {c, L, S, 35.f, 9.0f, 2.2f, 3.76f, .38f, 4, UW, 2.2f, 0}
@@ -123,9 +125,9 @@ static const AircraftSpec kSpecs[] = {
     LIGHT("C208", 11.5f, 15.9f), LIGHT("PA28", 7.3f, 10.7f), LIGHT("SR22", 7.9f, 11.7f),
     LIGHT("SR20", 7.9f, 10.8f), LIGHT("DA40", 8.1f, 11.9f), LIGHT("DA42", 8.6f, 13.4f),
     BIZ("GLF4", 26.9f, 23.7f), BIZ("GLF5", 29.4f, 28.5f), BIZ("GLF6", 30.4f, 30.4f),
-    BIZ("GLEX", 30.3f, 28.7f), BIZ("C56X", 19.0f, 17.2f), BIZ("C25", 14.0f, 14.3f),
-    BIZ("C68", 19.4f, 22.0f), BIZ("E55P", 12.8f, 12.3f), BIZ("E50P", 12.8f, 12.3f),
-    BIZ("FA7X", 20.9f, 26.2f), BIZ("F2TH", 20.2f, 19.3f), BIZ("LJ", 14.5f, 14.0f),
+    BIZ("GLEX", 30.3f, 28.7f), BIZ_S("C56X", 19.0f, 17.2f), BIZ_S("C25", 14.0f, 14.3f),
+    BIZ_S("C68", 19.4f, 22.0f), BIZ_S("E55P", 12.8f, 12.3f), BIZ_S("E50P", 12.8f, 12.3f),
+    BIZ("FA7X", 20.9f, 26.2f), BIZ("F2TH", 20.2f, 19.3f), BIZ_S("LJ", 14.5f, 14.0f),
 };
 
 // Representative specs when the exact type is unknown (by class).

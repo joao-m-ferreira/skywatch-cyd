@@ -373,6 +373,8 @@ static bool isNeo(const char* t) {
 }
 static Winglet wingletFor(const char* t, const AircraftSpec& s) {
   if (s.mount != Mount::UnderWing) return kWNone;
+  for (const char* p : {"B748", "B70", "B72", "A124", "A225"}) if (hasPrefix(t, p)) return kWNone;  // raked tips / no winglets
+  for (const char* p : {"A306", "A30B", "A310"}) if (hasPrefix(t, p)) return kWFence;
   for (const char* p : {"B37M", "B38M", "B39M", "B3XM"}) if (hasPrefix(t, p)) return kWScimitar;
   for (const char* p : {"A318", "A319", "A320", "A321"}) if (hasPrefix(t, p)) return kWFence;
   for (const char* p : {"A19N", "A20N", "A21N", "A338", "A339", "A35", "BCS"}) if (hasPrefix(t, p)) return kWShark;
@@ -394,6 +396,7 @@ struct Style {
   float tuck = 0.45f;      // engine drop below the wing, in nacelle diameters
   bool rake = false;       // raked wingtips (777, 787)
   bool ttail = false;      // horizontal tail on top of the fin
+  bool low_wing = false;   // light aircraft with a low wing (Piper, Cirrus, Diamond)
 };
 static Style styleFor(const char* t, const AircraftSpec& s) {
   Style st;
@@ -404,7 +407,9 @@ static Style styleFor(const char* t, const AircraftSpec& s) {
     }
     return false;
   };
-  if (any({"A318", "A319", "A320", "A321", "A19N", "A20N", "A21N"})) {
+  if (any({"PA28", "SR2", "DA4"})) {  // low-wing light aircraft (the Cessnas keep their high wing)
+    st.low_wing = true; st.nose_pow = 2.2f;
+  } else if (any({"A318", "A319", "A320", "A321", "A19N", "A20N", "A21N"})) {
     st.nose_pow = 1.9f; st.tail_len = 0.95f;
   } else if (any({"BCS"})) {  // A220: short blunt nose, big fin and engines
     st.nose_pow = 2.4f; st.nose_len = 0.9f; st.tail_len = 0.9f; st.fin = 1.12f; st.eng_w = 1.15f;
@@ -420,12 +425,14 @@ static Style styleFor(const char* t, const AircraftSpec& s) {
     st.nose_pow = 1.9f; st.eng_w = 1.12f; st.tail_len = 1.05f;
   } else if (any({"A35"})) {  // A350: pointed nose, big fin, long nacelles
     st.nose_pow = 1.65f; st.nose_len = 1.1f; st.tail_len = 1.1f; st.fin = 1.05f; st.eng_len = 1.2f;
+  } else if (any({"B748"})) {  // 747-8: raked tips, no winglets
+    st.fin = 1.05f; st.rake = true; st.eng_len = 1.15f;
   } else if (any({"B74"})) {
     st.fin = 1.05f;
   } else if (any({"A388"})) {
     st.nose_pow = 2.1f;
   } else if (any({"E17", "E75", "E19", "E29"})) {
-    st.nose_pow = 2.1f; st.nose_len = 0.95f; st.eng_w = 0.95f;
+    st.nose_pow = 2.1f; st.nose_len = 0.95f; st.eng_w = hasPrefix(t, "E29") ? 1.15f : 0.95f;  // E2: bigger geared fans
   } else if (s.mount == Mount::Prop) {
     st.nose_pow = 2.4f;
   } else if (s.mount == Mount::Rear && s.engines > 0 && s.length < 40.0f) {  // business jets, regional jets
@@ -444,8 +451,8 @@ const Mesh& buildAircraft(const char* type, const Palette& pal) {
   }
   const float L = s.length, h = L / 2.0f, D = s.fuselage_w * 1.3f, R = D / 2.0f;  // a little chunkier than real, for legibility
   const float b = s.span / 2.0f, tanL = tanf(rad(s.sweep_deg));
-  const bool high = s.mount == Mount::Prop;
   const Style st = styleFor(type, s);
+  const bool high = s.mount == Mount::Prop && !st.low_wing;
   const float nc = 1.6f * D * st.nose_len, tc = 2.6f * D * st.tail_len;
 
   // --- Fuselage rings, nose to tail. ---
